@@ -52,42 +52,43 @@ import androidx.compose.ui.unit.sp
 @Preview(showSystemUi = true)
 @Composable
 fun PantallaPrincipal(
+    onNavigateToHistorial: () -> Unit = {},
+    onNavigateToEstadisticas: () -> Unit = {},  // ← ¡Agrega esta línea!
     onClick:()-> Unit={}
 ){
-        Column(
+    Column(
+
+    ) {
+        TopBar()
+        Balance()
+        Row(
+            horizontalArrangement = Arrangement.SpaceAround,
+            modifier=Modifier
+                .fillMaxWidth()
+                .padding(15.dp)
 
         ) {
-            TopBar()
-            Balance()
-            Row(
-                horizontalArrangement = Arrangement.SpaceAround,
-                modifier=Modifier
-                    .fillMaxWidth()
-                    .padding(15.dp)
-
-            ) {
-                Botones(
-                    text = "Agregar",
-                    icon = painterResource(R.drawable.mdi),
-                    tint = Color.Green,
-                    onClick={}
-                )
-                Botones(
-                    text = "Historial",
-                    icon = painterResource(R.drawable.fluent__history_32_filled),
-                    tint = Color.Blue,
-                    onClick={}
-                )
-                Botones(
-                    text = "Estadisticas",
-                    icon = painterResource(R.drawable.lucide__chart_column),
-                    tint = Color.Magenta,
-                    onClick={}
-                )
-            }
-            Historial()
+            Botones(
+                text = "Agregar",
+                icon = painterResource(R.drawable.mdi),
+                tint = Color.Green,
+                onClick={}
+            )
+            Botones(
+                text = "Historial",
+                icon = painterResource(R.drawable.fluent__history_32_filled),
+                tint = Color.Blue,
+                onClick = onNavigateToHistorial  // Aquí usamos el callback
+            )
+            Botones(
+                text = "Estadisticas",
+                icon = painterResource(R.drawable.lucide__chart_column),
+                tint = Color.Magenta,
+                onClick = onNavigateToEstadisticas  // Ahora este callback existe
+            )
         }
-
+        Historial()
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
