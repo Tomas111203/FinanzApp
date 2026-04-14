@@ -52,14 +52,8 @@ import androidx.compose.ui.unit.sp
 @Preview(showSystemUi = true)
 @Composable
 fun PantallaPrincipal(
-    modifier: Modifier=Modifier,
     onClick:()-> Unit={}
 ){
-    val modifierComponents= Modifier
-        .fillMaxWidth()
-        .padding(horizontal = 16.dp, vertical = 8.dp)
-        .defaultMinSize(minHeight = 48.dp)
-
         Column(
 
         ) {
