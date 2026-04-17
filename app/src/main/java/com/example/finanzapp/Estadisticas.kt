@@ -17,7 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -125,20 +127,20 @@ fun EstadisticasScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // FIX: TrendingDown → KeyboardArrowDown
+                    // Total Gastos Card
                     SummaryCard(
                         title = "Total Gastos",
                         amount = totalExpenses,
-                        icon = Icons.Default.KeyboardArrowDown,
+                        icon = painterResource(R.drawable.icon_park_outline__trending_down),  // ← Tu ícono de gastos
                         iconColor = Color(0xFFDC2626),
                         modifier = Modifier.weight(1f),
                         currencyFormatter = currencyFormatter
                     )
-                    // FIX: TrendingUp → KeyboardArrowUp
+                    // Total Ingresos Card
                     SummaryCard(
                         title = "Total Ingresos",
                         amount = totalIncome,
-                        icon = Icons.Default.KeyboardArrowUp,
+                        icon = painterResource(R.drawable.icon_park_outline__trending_up),  // ← Tu ícono de ingresos
                         iconColor = Color(0xFF16A34A),
                         modifier = Modifier.weight(1f),
                         currencyFormatter = currencyFormatter
@@ -172,7 +174,7 @@ fun EstadisticasScreen(
                                 PieChart(context).apply {
                                     setUsePercentValues(true)
                                     description.isEnabled = false
-                                    setExtraOffsets(5f, 10f, 5f, 5f)
+                                    setExtraOffsets(5f, 10f, 5f, 10f)
                                     dragDecelerationFrictionCoef = 0.95f
                                     isDrawHoleEnabled = true
                                     setHoleColor(Color.White.toArgb())
@@ -191,8 +193,9 @@ fun EstadisticasScreen(
                                     setCenterText("Gastos\nTotales")
                                     setCenterTextColor(Color.Black.toArgb())
 
-                                    val entries = categoryData.map { category ->
-                                        PieEntry(category.value.toFloat(), category.name)
+                                    val entries = ArrayList<PieEntry>()
+                                    categoryData.forEach { category ->
+                                        entries.add(PieEntry(category.value.toFloat(), category.name))
                                     }
 
                                     val dataSet = PieDataSet(entries, "").apply {
@@ -202,15 +205,21 @@ fun EstadisticasScreen(
                                         colors = categoryData.map { it.color.toArgb() }
                                     }
 
-                                    data = PieData(dataSet).apply {
-                                        setValueTextSize(12f)
+                                    val pieData = PieData(dataSet).apply {
+                                        setValueTextSize(14f)  // ← PORCENTAJES MÁS GRANDES
                                         setValueTextColor(Color.Black.toArgb())
                                         setValueFormatter(object : ValueFormatter() {
                                             override fun getFormattedValue(value: Float): String {
-                                                return "${value.toInt()}%"
+                                                return if (value >= 5f) "${value.toInt()}%" else ""
                                             }
                                         })
                                     }
+
+                                    data = pieData
+
+                                    // Texto de categorías MÁS PEQUEÑO
+                                    setEntryLabelColor(Color.Black.toArgb())  // ← Gris oscuro para diferenciar
+                                    setEntryLabelTextSize(9f)  // ← TEXTO DE CATEGORÍAS PEQUEÑO
 
                                     invalidate()
                                 }
@@ -267,19 +276,24 @@ fun EstadisticasScreen(
                                     setScaleEnabled(false)
                                     setMaxVisibleValueCount(60)
 
+                                    // Configurar eje X
                                     xAxis.apply {
                                         position = XAxis.XAxisPosition.BOTTOM
                                         setDrawGridLines(false)
                                         granularity = 1f
-                                        // FIX: List en lugar de Array
-                                        valueFormatter = IndexAxisValueFormatter(
-                                            monthlyData.map { it.month }
-                                        )
+                                        valueFormatter = IndexAxisValueFormatter(monthlyData.map { it.month })
+                                        setCenterAxisLabels(true)  // ← Centrar etiquetas
                                     }
 
                                     axisLeft.apply {
                                         setDrawGridLines(true)
                                         axisMinimum = 0f
+                                        // Formatear valores grandes como 18k en lugar de 18000
+                                        valueFormatter = object : ValueFormatter() {
+                                            override fun getFormattedValue(value: Float): String {
+                                                return if (value >= 1000) "${(value / 1000).toInt()}k" else value.toInt().toString()
+                                            }
+                                        }
                                     }
 
                                     axisRight.isEnabled = false
@@ -291,32 +305,39 @@ fun EstadisticasScreen(
                                         setDrawInside(false)
                                     }
 
-                                    // FIX: renombrar 'data' → 'item' para evitar conflicto con this.data
-                                    val incomeEntries = monthlyData.mapIndexed { index, item ->
-                                        BarEntry(index.toFloat(), item.income.toFloat())
-                                    }
+                                    // Crear entradas CORRECTAMENTE
+                                    val incomeEntries = ArrayList<BarEntry>()
+                                    val expenseEntries = ArrayList<BarEntry>()
 
-                                    val expenseEntries = monthlyData.mapIndexed { index, item ->
-                                        BarEntry(index.toFloat(), item.expenses.toFloat())
+                                    monthlyData.forEachIndexed { index, item ->
+                                        incomeEntries.add(BarEntry(index.toFloat(), item.income.toFloat()))
+                                        expenseEntries.add(BarEntry(index.toFloat(), item.expenses.toFloat()))
                                     }
 
                                     val incomeDataSet = BarDataSet(incomeEntries, "Ingresos").apply {
                                         color = Color(0xFF10B981).toArgb()
                                         valueTextSize = 10f
+                                        valueTextColor = Color.Black.toArgb()
                                     }
 
                                     val expenseDataSet = BarDataSet(expenseEntries, "Gastos").apply {
                                         color = Color(0xFFEF4444).toArgb()
                                         valueTextSize = 10f
+                                        valueTextColor = Color.Black.toArgb()
                                     }
 
-                                    val barData = BarData(incomeDataSet, expenseDataSet).apply {
-                                        barWidth = 0.3f
-                                    }
+                                    // Crear BarData y configurar el ancho de barra
+                                    val barData = BarData(incomeDataSet, expenseDataSet)
+                                    barData.barWidth = 0.3f
 
                                     data = barData
 
-                                    groupBars(0f, 0.4f, 0.02f)
+                                    // Configurar agrupación CORRECTA
+                                    groupBars(0f, 0.4f, 0.05f)  // ← Espaciado correcto
+
+                                    // Asegurar que se muestren todos los meses
+                                    xAxis.axisMinimum = -0.5f
+                                    xAxis.axisMaximum = monthlyData.size.toFloat() - 0.5f
 
                                     invalidate()
                                 }
@@ -387,7 +408,7 @@ fun EstadisticasScreen(
 fun SummaryCard(
     title: String,
     amount: Double,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: Painter,  // ← Cambia ImageVector por Painter
     iconColor: Color,
     modifier: Modifier = Modifier,
     currencyFormatter: NumberFormat
@@ -413,7 +434,7 @@ fun SummaryCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    imageVector = icon,
+                    painter = icon,  // ← Cambia imageVector por painter
                     contentDescription = null,
                     tint = iconColor,
                     modifier = Modifier.size(20.dp)
