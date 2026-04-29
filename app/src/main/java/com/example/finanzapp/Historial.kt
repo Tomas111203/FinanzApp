@@ -7,19 +7,16 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -40,12 +37,20 @@ data class Transaction(
     val type: String // "income" o "expense"
 )
 
+data class TransactionInput(
+    val name: String,
+    val amount: Double,
+    val category: String,
+    val date: String,
+    val type: String
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistorialScreen(
     onBackClick: () -> Unit = {}
 ) {
-    // Datos mock (estado mutable para poder agregar nuevos)
+    // Datos mock
     var transactions by remember {
         mutableStateOf(
             listOf(
@@ -71,14 +76,12 @@ fun HistorialScreen(
         "Ingreso"
     )
 
-    // Estados
     var searchTerm by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("Todas las categorías") }
     var showCategoryDropdown by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
-    var transactionType by remember { mutableStateOf("income") } // "income" o "expense"
+    var transactionType by remember { mutableStateOf("income") }
 
-    // Filtrar transacciones
     val filteredTransactions = transactions.filter { transaction ->
         val matchesSearch = transaction.name.lowercase().contains(searchTerm.lowercase())
         val matchesCategory = selectedCategory == "Todas las categorías" ||
@@ -86,15 +89,12 @@ fun HistorialScreen(
         matchesSearch && matchesCategory
     }
 
-    // Calcular totales
     val totalIncome = transactions.filter { it.type == "income" }.sumOf { it.amount }
     val totalExpense = transactions.filter { it.type == "expense" }.sumOf { it.amount }
     val totalBalance = totalIncome - totalExpense
 
-    // Formateador de moneda
     val currencyFormatter = remember { NumberFormat.getNumberInstance(Locale("es", "MX")) }
 
-    // Diálogo para agregar transacción
     if (showAddDialog) {
         AddTransactionDialog(
             type = transactionType,
@@ -145,7 +145,6 @@ fun HistorialScreen(
                         color = Color.Black,
                         modifier = Modifier.weight(1f)
                     )
-                    // Botón para agregar ingreso
                     IconButton(
                         onClick = {
                             transactionType = "income"
@@ -159,7 +158,6 @@ fun HistorialScreen(
                         )
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    // Botón para agregar gasto
                     IconButton(
                         onClick = {
                             transactionType = "expense"
@@ -183,97 +181,81 @@ fun HistorialScreen(
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp, vertical = 16.dp)
         ) {
-            // Sección de búsqueda y filtro
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            // Campo de búsqueda
+            OutlinedTextField(
+                value = searchTerm,
+                onValueChange = { searchTerm = it },
+                placeholder = { Text("Buscar transacción...") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Buscar",
+                        tint = Color.Gray
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Filtro por categoría (simplificado)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                // Campo de búsqueda
-                OutlinedTextField(
-                    value = searchTerm,
-                    onValueChange = { searchTerm = it },
-                    placeholder = { Text("Buscar transacción...") },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Buscar",
-                            tint = Color.Gray
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color.White)
-                        .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
-                    colors = TextFieldDefaults.colors(
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White,
-                        cursorColor = Color.Black
-                    ),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
+                Icon(
+                    imageVector = Icons.Default.FilterList,
+                    contentDescription = "Filtrar",
+                    tint = Color.Gray,
+                    modifier = Modifier.size(20.dp)
                 )
 
-                // Filtro por categoría
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_filter),
-                        contentDescription = "Filtrar",
-                        tint = Color.Gray,
-                        modifier = Modifier.size(20.dp)
-                    )
-
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        Surface(
+                Box(modifier = Modifier.weight(1f)) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clickable { showCategoryDropdown = true }
+                            .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color.White
+                    ) {
+                        Row(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .clickable { showCategoryDropdown = true }
-                                .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
-                            shape = RoundedCornerShape(12.dp),
-                            color = Color.White
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = selectedCategory,
-                                    color = if (selectedCategory == "Todas las categorías")
-                                        Color.Gray else Color.Black
-                                )
-                                Icon(
-                                    imageVector = Icons.Default.ArrowDropDown,
-                                    contentDescription = "Desplegar",
-                                    tint = Color.Gray
-                                )
-                            }
+                            Text(
+                                text = selectedCategory,
+                                color = if (selectedCategory == "Todas las categorías")
+                                    Color.Gray else Color.Black
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Desplegar",
+                                tint = Color.Gray
+                            )
                         }
+                    }
 
-                        DropdownMenu(
-                            expanded = showCategoryDropdown,
-                            onDismissRequest = { showCategoryDropdown = false },
-                            modifier = Modifier
-                                .fillMaxWidth(0.9f)
-                                .background(Color.White, RoundedCornerShape(8.dp))
-                        ) {
-                            categories.forEach { category ->
-                                DropdownMenuItem(
-                                    text = { Text(category) },
-                                    onClick = {
-                                        selectedCategory = category
-                                        showCategoryDropdown = false
-                                    }
-                                )
-                            }
+                    DropdownMenu(
+                        expanded = showCategoryDropdown,
+                        onDismissRequest = { showCategoryDropdown = false },
+                        modifier = Modifier.fillMaxWidth(0.9f)
+                    ) {
+                        categories.forEach { category ->
+                            DropdownMenuItem(
+                                text = { Text(category) },
+                                onClick = {
+                                    selectedCategory = category
+                                    showCategoryDropdown = false
+                                }
+                            )
                         }
                     }
                 }
@@ -281,7 +263,7 @@ fun HistorialScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Tarjeta de resumen rápido
+            // Tarjeta de resumen
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -331,8 +313,7 @@ fun HistorialScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .shadow(4.dp, RoundedCornerShape(16.dp))
-                    .border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(16.dp)),
+                    .shadow(4.dp, RoundedCornerShape(16.dp)),
                 shape = RoundedCornerShape(16.dp),
                 color = Color.White
             ) {
@@ -424,7 +405,6 @@ fun TransactionItem(
             modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icono según tipo
             Surface(
                 modifier = Modifier.size(40.dp),
                 shape = RoundedCornerShape(20.dp),
@@ -497,7 +477,7 @@ fun AddTransactionDialog(
 
     val currentDate = remember {
         val formatter = java.text.SimpleDateFormat("dd MMM yyyy", Locale("es", "MX"))
-        formatter.format(Date())
+        formatter.format(java.util.Date())
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -597,14 +577,6 @@ fun AddTransactionDialog(
         }
     }
 }
-
-data class TransactionInput(
-    val name: String,
-    val amount: Double,
-    val category: String,
-    val date: String,
-    val type: String
-)
 
 @Preview(showSystemUi = true)
 @Composable
