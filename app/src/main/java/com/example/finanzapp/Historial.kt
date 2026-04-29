@@ -10,9 +10,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,9 +22,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import java.text.NumberFormat
 import java.util.*
 
@@ -44,17 +45,19 @@ data class Transaction(
 fun HistorialScreen(
     onBackClick: () -> Unit = {}
 ) {
-    // Datos mock
-    val mockTransactions = remember {
-        listOf(
-            Transaction(1, "Supermercado", -450.5, "Alimentación", "28 Mar 2026", "expense"),
-            Transaction(2, "Salario", 18000.0, "Ingreso", "25 Mar 2026", "income"),
-            Transaction(3, "Gasolina", -280.0, "Transporte", "27 Mar 2026", "expense"),
-            Transaction(4, "Netflix", -129.0, "Entretenimiento", "26 Mar 2026", "expense"),
-            Transaction(5, "Farmacia", -320.5, "Salud", "24 Mar 2026", "expense"),
-            Transaction(6, "Uber", -85.0, "Transporte", "23 Mar 2026", "expense"),
-            Transaction(7, "Restaurante", -650.0, "Alimentación", "22 Mar 2026", "expense"),
-            Transaction(8, "Freelance", 2500.0, "Ingreso", "20 Mar 2026", "income")
+    // Datos mock (estado mutable para poder agregar nuevos)
+    var transactions by remember {
+        mutableStateOf(
+            listOf(
+                Transaction(1, "Supermercado", 450.5, "Alimentación", "28 Mar 2026", "expense"),
+                Transaction(2, "Salario", 18000.0, "Ingreso", "25 Mar 2026", "income"),
+                Transaction(3, "Gasolina", 280.0, "Transporte", "27 Mar 2026", "expense"),
+                Transaction(4, "Netflix", 129.0, "Entretenimiento", "26 Mar 2026", "expense"),
+                Transaction(5, "Farmacia", 320.5, "Salud", "24 Mar 2026", "expense"),
+                Transaction(6, "Uber", 85.0, "Transporte", "23 Mar 2026", "expense"),
+                Transaction(7, "Restaurante", 650.0, "Alimentación", "22 Mar 2026", "expense"),
+                Transaction(8, "Freelance", 2500.0, "Ingreso", "20 Mar 2026", "income")
+            )
         )
     }
 
@@ -72,24 +75,47 @@ fun HistorialScreen(
     var searchTerm by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("Todas las categorías") }
     var showCategoryDropdown by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var transactionType by remember { mutableStateOf("income") } // "income" o "expense"
 
     // Filtrar transacciones
-    val filteredTransactions = mockTransactions.filter { transaction ->
+    val filteredTransactions = transactions.filter { transaction ->
         val matchesSearch = transaction.name.lowercase().contains(searchTerm.lowercase())
         val matchesCategory = selectedCategory == "Todas las categorías" ||
                 transaction.category == selectedCategory
         matchesSearch && matchesCategory
     }
 
-    // Calcular balance total
-    val totalBalance = filteredTransactions.sumOf { it.amount }
+    // Calcular totales
+    val totalIncome = transactions.filter { it.type == "income" }.sumOf { it.amount }
+    val totalExpense = transactions.filter { it.type == "expense" }.sumOf { it.amount }
+    val totalBalance = totalIncome - totalExpense
 
     // Formateador de moneda
     val currencyFormatter = remember { NumberFormat.getNumberInstance(Locale("es", "MX")) }
 
+    // Diálogo para agregar transacción
+    if (showAddDialog) {
+        AddTransactionDialog(
+            type = transactionType,
+            onDismiss = { showAddDialog = false },
+            onAdd = { newTransaction ->
+                val newId = (transactions.maxOfOrNull { it.id } ?: 0) + 1
+                transactions = transactions + Transaction(
+                    id = newId,
+                    name = newTransaction.name,
+                    amount = newTransaction.amount,
+                    category = newTransaction.category,
+                    date = newTransaction.date,
+                    type = newTransaction.type
+                )
+                showAddDialog = false
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
-            // Header
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -117,12 +143,39 @@ fun HistorialScreen(
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Black,
-                        modifier = Modifier.padding(start = 8.dp)
+                        modifier = Modifier.weight(1f)
                     )
+                    // Botón para agregar ingreso
+                    IconButton(
+                        onClick = {
+                            transactionType = "income"
+                            showAddDialog = true
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Agregar Ingreso",
+                            tint = Color(0xFF16A34A)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    // Botón para agregar gasto
+                    IconButton(
+                        onClick = {
+                            transactionType = "expense"
+                            showAddDialog = true
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Remove,
+                            contentDescription = "Agregar Gasto",
+                            tint = Color(0xFFDC2626)
+                        )
+                    }
                 }
             }
         },
-        containerColor = Color(0xFFF0FDF4) // Gradiente suave verde
+        containerColor = Color(0xFFF0FDF4)
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -175,8 +228,7 @@ fun HistorialScreen(
                         modifier = Modifier.size(20.dp)
                     )
 
-                    Box {
-                        // Botón que muestra el dropdown
+                    Box(modifier = Modifier.fillMaxWidth()) {
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -206,7 +258,6 @@ fun HistorialScreen(
                             }
                         }
 
-                        // Dropdown menu
                         DropdownMenu(
                             expanded = showCategoryDropdown,
                             onDismissRequest = { showCategoryDropdown = false },
@@ -230,6 +281,51 @@ fun HistorialScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Tarjeta de resumen rápido
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(4.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Ingresos", fontSize = 12.sp, color = Color.Gray)
+                        Text(
+                            text = "+$${currencyFormatter.format(totalIncome)}",
+                            color = Color(0xFF16A34A),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Gastos", fontSize = 12.sp, color = Color.Gray)
+                        Text(
+                            text = "-$${currencyFormatter.format(totalExpense)}",
+                            color = Color(0xFFDC2626),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Balance", fontSize = 12.sp, color = Color.Gray)
+                        Text(
+                            text = "$${currencyFormatter.format(totalBalance)}",
+                            color = if (totalBalance >= 0) Color(0xFF16A34A) else Color(0xFFDC2626),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Lista de transacciones
             Surface(
                 modifier = Modifier
@@ -245,77 +341,41 @@ fun HistorialScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "No se encontraron transacciones",
-                            color = Color.Gray,
-                            fontSize = 16.sp
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Outlined.Receipt,
+                                contentDescription = null,
+                                tint = Color.Gray,
+                                modifier = Modifier.size(64.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "No se encontraron transacciones",
+                                color = Color.Gray,
+                                fontSize = 16.sp
+                            )
+                        }
                     }
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize()
                     ) {
                         items(filteredTransactions) { transaction ->
-                            TransactionItem(transaction, currencyFormatter)
+                            TransactionItem(
+                                transaction = transaction,
+                                currencyFormatter = currencyFormatter,
+                                onDelete = {
+                                    transactions = transactions.filter { it.id != transaction.id }
+                                }
+                            )
                             if (transaction != filteredTransactions.last()) {
                                 Divider(
                                     color = Color(0xFFE5E7EB),
-                                    thickness = 1.dp
+                                    thickness = 1.dp,
+                                    modifier = Modifier.padding(horizontal = 16.dp)
                                 )
                             }
                         }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Resumen
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(4.dp, RoundedCornerShape(16.dp))
-                    .border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(16.dp)),
-                shape = RoundedCornerShape(16.dp),
-                color = Color.White
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Total de transacciones:",
-                            color = Color.Gray,
-                            fontSize = 14.sp
-                        )
-                        Text(
-                            text = filteredTransactions.size.toString(),
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 16.sp
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Balance del período:",
-                            color = Color.Gray,
-                            fontSize = 14.sp
-                        )
-                        Text(
-                            text = "$${currencyFormatter.format(totalBalance)}",
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 18.sp,
-                            color = if (totalBalance >= 0) Color(0xFF16A34A) else Color(0xFFDC2626)
-                        )
                     }
                 }
             }
@@ -326,56 +386,225 @@ fun HistorialScreen(
 @Composable
 fun TransactionItem(
     transaction: Transaction,
-    currencyFormatter: NumberFormat
+    currencyFormatter: NumberFormat,
+    onDelete: () -> Unit
 ) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Eliminar transacción") },
+            text = { Text("¿Deseas eliminar \"${transaction.name}\"?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete()
+                    showDeleteDialog = false
+                }) {
+                    Text("Eliminar", color = Color(0xFFDC2626))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { }
+            .clickable { showDeleteDialog = true }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
-            modifier = Modifier.weight(1f)
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = transaction.name,
-                fontWeight = FontWeight.Medium,
-                fontSize = 16.sp,
-                color = Color.Black
-            )
-            Text(
-                text = transaction.category,
-                fontSize = 14.sp,
-                color = Color.Gray
-            )
-            Text(
-                text = transaction.date,
-                fontSize = 12.sp,
-                color = Color.Gray,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-        }
-
-        Column(
-            horizontalAlignment = Alignment.End
-        ) {
-            val amountText = if (transaction.amount >= 0) {
-                "+$${currencyFormatter.format(transaction.amount)}"
-            } else {
-                "-$${currencyFormatter.format(kotlin.math.abs(transaction.amount))}"
+            // Icono según tipo
+            Surface(
+                modifier = Modifier.size(40.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = if (transaction.type == "income")
+                    Color(0xFF16A34A).copy(alpha = 0.1f)
+                else
+                    Color(0xFFDC2626).copy(alpha = 0.1f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (transaction.type == "income")
+                            Icons.Default.ArrowUpward
+                        else
+                            Icons.Default.ArrowDownward,
+                        contentDescription = null,
+                        tint = if (transaction.type == "income")
+                            Color(0xFF16A34A)
+                        else
+                            Color(0xFFDC2626),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
 
-            Text(
-                text = amountText,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 16.sp,
-                color = if (transaction.amount >= 0) Color(0xFF16A34A) else Color(0xFFDC2626)
-            )
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column {
+                Text(
+                    text = transaction.name,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 16.sp,
+                    color = Color.Black
+                )
+                Text(
+                    text = transaction.category,
+                    fontSize = 13.sp,
+                    color = Color.Gray
+                )
+                Text(
+                    text = transaction.date,
+                    fontSize = 11.sp,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
+
+        Text(
+            text = if (transaction.type == "income")
+                "+$${currencyFormatter.format(transaction.amount)}"
+            else
+                "-$${currencyFormatter.format(transaction.amount)}",
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 16.sp,
+            color = if (transaction.type == "income") Color(0xFF16A34A) else Color(0xFFDC2626)
+        )
+    }
+}
+
+@Composable
+fun AddTransactionDialog(
+    type: String,
+    onDismiss: () -> Unit,
+    onAdd: (TransactionInput) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("") }
+    var date by remember { mutableStateOf("") }
+
+    val currentDate = remember {
+        val formatter = java.text.SimpleDateFormat("dd MMM yyyy", Locale("es", "MX"))
+        formatter.format(Date())
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(8.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = if (type == "income") "Agregar Ingreso" else "Agregar Gasto",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Concepto") },
+                    placeholder = { Text("Ej: Salario, Compra...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { amount = it },
+                    label = { Text("Monto") },
+                    placeholder = { Text("0.00") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = category,
+                    onValueChange = { category = it },
+                    label = { Text("Categoría") },
+                    placeholder = { Text("Alimentación, Transporte...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = date,
+                    onValueChange = { date = it },
+                    label = { Text("Fecha") },
+                    placeholder = { Text(currentDate) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
+                    ) {
+                        Text("Cancelar")
+                    }
+
+                    Button(
+                        onClick = {
+                            if (name.isNotBlank() && amount.isNotBlank() && category.isNotBlank()) {
+                                val amountValue = amount.toDoubleOrNull() ?: 0.0
+                                if (amountValue > 0) {
+                                    onAdd(
+                                        TransactionInput(
+                                            name = name,
+                                            amount = amountValue,
+                                            category = category,
+                                            date = date.ifBlank { currentDate },
+                                            type = type
+                                        )
+                                    )
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (type == "income") Color(0xFF16A34A) else Color(0xFFDC2626)
+                        )
+                    ) {
+                        Text("Guardar")
+                    }
+                }
+            }
         }
     }
 }
+
+data class TransactionInput(
+    val name: String,
+    val amount: Double,
+    val category: String,
+    val date: String,
+    val type: String
+)
 
 @Preview(showSystemUi = true)
 @Composable
