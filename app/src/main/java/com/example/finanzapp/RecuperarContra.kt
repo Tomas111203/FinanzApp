@@ -142,7 +142,12 @@ fun RecuperarContra(
                         colorResource(R.color.ic_launcher_background),
                         contentColor = Color.White
                     ),
-                    modifier=modifierComponents
+                    modifier = modifierComponents
+                        .shadow(
+                            elevation = 4.dp, // Altura de la sombra
+                            shape = RoundedCornerShape(24.dp), // Forma de la sombra (ajústala según tu botón)
+                            clip = true // Para que no recorte la sombra
+                        )
                 ) {Text("Enviar Instrucciones")}
             }
         }

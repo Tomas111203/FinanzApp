@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,15 +30,25 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.finanzapp.ui.theme.FinanzAppTheme
+import com.google.firebase.Firebase
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.auth
 import kotlin.toString
 
 class MainActivity : ComponentActivity() {
+
+    private  lateinit var auth: FirebaseAuth
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        auth= Firebase.auth
         setContent {
             FinanzAppTheme(){
-                App()
+                ForceLightTheme {
+                    CrearCuenta(
+                        auth
+                    )
+                }
             }
         }
     }
@@ -61,5 +72,18 @@ fun LoginApp(onClick:()-> Unit = {}){
             Modifier.padding(),
             onClick
         )
+}
+
+@Composable
+fun ForceLightTheme(
+    content: @Composable () -> Unit
+) {
+    MaterialTheme(
+        colorScheme = lightColorScheme(),
+        typography = MaterialTheme.typography,
+        shapes = MaterialTheme.shapes
+    ) {
+        content()
+    }
 }
 

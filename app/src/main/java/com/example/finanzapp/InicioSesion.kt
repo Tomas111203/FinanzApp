@@ -11,6 +11,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.fromColorLong
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.ModifierLocalBeyondBoundsLayout
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.integerResource
@@ -165,7 +167,12 @@ fun LoginScreen(
                         colorResource(R.color.ic_launcher_background),
                         contentColor = Color.White
                     ),
-                    modifier=modifierComponents
+                    modifier = modifierComponents
+                        .shadow(
+                            elevation = 4.dp, // Altura de la sombra
+                            shape = RoundedCornerShape(24.dp), // Forma de la sombra (ajústala según tu botón)
+                            clip = true // Para que no recorte la sombra
+                        )
                 ) {Text("Entrar")}
                 OutlinedButton(
                     onClick = onClick,
@@ -173,9 +180,44 @@ fun LoginScreen(
                     colors = ButtonDefaults.buttonColors(
                         Color.White,
                         contentColor = Color.Black
-                    ),
-                    modifier=modifierComponents
+                    ),modifier = modifierComponents
+                        .shadow(
+                            elevation = 4.dp, // Altura de la sombra
+                            shape = RoundedCornerShape(24.dp), // Forma de la sombra (ajústala según tu botón)
+                            clip = true // Para que no recorte la sombra
+                        )
                 ) {Text("Crear Cuenta")}
+                OutlinedButton(
+                    onClick = onClick,
+                    border = BorderStroke(2.dp, Color(0xFFF3F3F5)),
+                    colors = ButtonDefaults.buttonColors(
+                        Color.White,
+                        contentColor = Color.Black
+                    ),
+                    modifier = modifierComponents
+                        .shadow(
+                            elevation = 4.dp, // Altura de la sombra
+                            shape = RoundedCornerShape(24.dp), // Forma de la sombra (ajústala según tu botón)
+                            clip = true // Para que no recorte la sombra
+                        )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Start
+                    ) {
+
+                        Image(
+                            painter = painterResource(id = R.drawable.logo_google),
+                            contentDescription = "Google Logo",
+                            modifier = Modifier.size(24.dp),
+                            contentScale = ContentScale.Fit
+                        )
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Text("Iniciar sesión con Google")
+                    }
+                }
                 ClickableText(
                     text = AnnotatedString("¿Olvidaste la contraseña?"),
                     style= TextStyle(

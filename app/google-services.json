@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "408787895035",
+    "project_id": "finanzapp-14b23",
+    "storage_bucket": "finanzapp-14b23.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:408787895035:android:51bd5a7a24fd5103c8265e",
+        "android_client_info": {
+          "package_name": "com.example.finanzapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "408787895035-37cj8p39226m7vmbvd48fnnda0395f1v.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.finanzapp",
+            "certificate_hash": "f59cae2bc4cf8667a30969e0df93c33cf2745323"
+          }
+        },
+        {
+          "client_id": "408787895035-smsu3jq34api79at1r1mn2f5bhsja6uu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBk90VoykouTHMK3zoZ2RFNWGymjEcUgIM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "408787895035-smsu3jq34api79at1r1mn2f5bhsja6uu.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

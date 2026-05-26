@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -30,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -51,10 +53,17 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.FirebaseAuthWeakPasswordException
+import com.google.firebase.auth.UserProfileChangeRequest
 
-@Preview(showSystemUi = true)
+
 @Composable
 fun CrearCuenta(
+    auth: FirebaseAuth,
     modifier: Modifier=Modifier,
     onClick:()-> Unit={}
 ){
@@ -64,6 +73,10 @@ fun CrearCuenta(
     var passwordVisible by remember { mutableStateOf(false) }
     var pass2 by remember { mutableStateOf("") }
     var passwordVisible2 by remember { mutableStateOf(false) }
+
+    var showDialog by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf("") }
+
     val modifierComponents= Modifier
         .fillMaxWidth()
         .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -79,7 +92,9 @@ fun CrearCuenta(
     )
 
     Column(
-        modifier=modifier.fillMaxSize().imePadding(),
+        modifier=modifier
+            .fillMaxSize()
+            .imePadding(),
         verticalArrangement = Arrangement.Center,
     ) {
         OutlinedButton(
@@ -119,23 +134,29 @@ fun CrearCuenta(
                 Text("Crear Cuenta", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,textAlign= TextAlign.Start)
                 Spacer(modifier = Modifier.height(5.dp))
 
+                val isNameValid= name.matches(Regex("^([A-Za-zÁÉÍÓÚáéíóú]+ ?){4,}$"))
                 TextField(
                     value = name,
                     onValueChange = {name=it},
                     label ={Text("Nombre Completo")},
                     colors = colorComponents,
                     placeholder = {Text("Juán Perez")},
-                    modifier=modifierComponents
+                    modifier=modifierComponents,
+                    visualTransformation = VisualTransformation.None,
+                    isError = !isNameValid
                 )
 
+                val isEmailValid=email.matches(Regex("^(?=.*[A-Za-z])(?=.*[@])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\$"))
                 TextField(
                     value = email,
                     onValueChange = {email=it},
                     colors = colorComponents,
                     label ={Text("Correo Electrónico")},
                     placeholder = {Text("finanzapp@email.com")},
-                    modifier=modifierComponents
+                    modifier=modifierComponents,
+                    isError= !isEmailValid
                 )
+                val isPasswordValid= pass.matches(Regex("^(?=.*[A-Z])(?=.*[a-z])(?=.*\\d)(?=.*[@=!\\$%&]).{8,}$"))
                 TextField(
                     value = pass,
                     onValueChange = {pass=it},
@@ -162,8 +183,10 @@ fun CrearCuenta(
                                     "Hide password" else "Show password"
                             )
                         }
-                    }
+                    },
+                    isError = !isPasswordValid
                 )
+                val isConfirmPasswordValid= pass==pass2
                 TextField(
                     value = pass2,
                     onValueChange = {pass2=it},
@@ -190,17 +213,94 @@ fun CrearCuenta(
                                     "Hide password" else "Show password"
                             )
                         }
-                    }
+                    },
+                    isError = !isConfirmPasswordValid
                 )
                 Button(
-                    onClick = onClick,
+                    onClick = {
+                        auth
+                            .createUserWithEmailAndPassword(email, pass2)
+                            .addOnCompleteListener { task ->
+                                if (task.isSuccessful) {
+
+                                    val newUser = auth.currentUser
+
+                                    val profileUpdates = UserProfileChangeRequest.Builder()
+                                        .setDisplayName(name)
+                                        .build()
+
+                                    newUser?.updateProfile(profileUpdates)
+                                        ?.addOnCompleteListener { profileTask ->
+                                            if (profileTask.isSuccessful) {
+                                                newUser.sendEmailVerification()
+                                                    .addOnCompleteListener { emailTask ->
+                                                        if (emailTask.isSuccessful) {
+                                                            message = "Registro exitoso. Revisa tu correo para verificar tu cuenta."
+                                                        } else {
+                                                            message = "Cuenta creada, pero no se pudo enviar el correo de verificación."
+                                                        }
+                                                        showDialog = true
+                                                    }
+                                            } else {
+                                                message = "Registro exitoso, pero no se pudo guardar tu nombre."
+                                                showDialog = true
+                                            }
+                                        }
+                                } else {
+                                    // Manejo de errores específicos
+                                    message = when (task.exception) {
+                                        is FirebaseAuthUserCollisionException -> "Este correo ya está registrado"
+                                        is FirebaseAuthWeakPasswordException -> "La contraseña es muy débil"
+                                        is FirebaseAuthInvalidCredentialsException -> "Correo electrónico inválido"
+                                        else -> "Error: ${task.exception?.message}"
+                                    }
+                                    showDialog = true
+                                }
+                            }
+                    },
+                    enabled = isConfirmPasswordValid && isPasswordValid && isNameValid && isEmailValid,
                     colors = ButtonDefaults.buttonColors(
                         colorResource(R.color.ic_launcher_background),
                         contentColor = Color.White
                     ),
-                    modifier=modifierComponents
+                    modifier = modifierComponents
+                        .shadow(
+                            elevation = 4.dp,
+                            shape = RoundedCornerShape(24.dp),
+                            clip = true
+                        )
                 ) {Text("Crear Cuenta")}
+            }
+
+            if (showDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDialog = false },
+                    title = {
+                        Text(
+                            text = if (message.contains("exitoso") || message.contains("Correcto")) "Éxito" else "Error",
+                            fontWeight = FontWeight.Bold,
+                            color = if (message.contains("exitoso") || message.contains("Correcto"))
+                                Color(0xFF4CAF50) else Color(0xFFF44336)
+                        )
+                    },
+                    text = {
+                        Text(text = message)
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = { showDialog = false },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color(0xFF6200EE)
+                            )
+                        ) {
+                            Text("Aceptar")
+                        }
+                    },
+                    containerColor = Color.White,
+                    shape = RoundedCornerShape(16.dp)
+                )
             }
         }
     }
 }
+
