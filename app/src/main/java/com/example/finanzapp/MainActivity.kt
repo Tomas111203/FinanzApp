@@ -20,12 +20,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -45,33 +49,59 @@ class MainActivity : ComponentActivity() {
         setContent {
             FinanzAppTheme(){
                 ForceLightTheme {
-                    CrearCuenta(
-                        auth
-                    )
+                    App(auth = auth)
                 }
             }
         }
     }
 }
 
-@Preview(showSystemUi = true)
 @Composable
-fun App(){
+fun App(auth: FirebaseAuth){
     val navController = rememberNavController()
+    val currentUser by remember { mutableStateOf(auth.currentUser) }
     NavHost(
         navController = navController,
-        startDestination = "Login"
+        startDestination = if (currentUser != null) "Principal" else "Login"
     ) {
-        composable("Login") { LoginApp() }
+        composable("Login") {
+            LoginApp(
+            auth,
+                navController=navController
+            )
+        }
+        composable("CrearCuenta"){
+            CrearCuenta(
+                auth,
+                navController
+            )
+        }
+        composable(route="Principal"){
+            PantallaPrincipal(
+                navController=navController,
+                user= auth.currentUser
+            )
+        }
+        composable(route="RecuperarContra") {
+            RecuperarContra(
+                auth,
+                navController
+            )
+        }
     }
 }
 
 @Composable
-fun LoginApp(onClick:()-> Unit = {}){
-        LoginScreen(
-            Modifier.padding(),
-            onClick
-        )
+fun LoginApp(
+    auth: FirebaseAuth,
+    navController: NavController
+){
+    LoginScreen(
+        auth,
+        modifier = Modifier.padding(),
+        navController= navController,
+        onCreateAccountClick = { navController.navigate("CrearCuenta") },
+    )
 }
 
 @Composable

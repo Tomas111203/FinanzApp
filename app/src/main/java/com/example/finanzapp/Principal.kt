@@ -47,19 +47,24 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
+import com.google.firebase.Firebase
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
 
 
-@Preview(showSystemUi = true)
 @Composable
 fun PantallaPrincipal(
-    onNavigateToHistorial: () -> Unit = {},
-    onNavigateToEstadisticas: () -> Unit = {},  // ← ¡Agrega esta línea!
+    navController: NavController,
+    user: FirebaseUser?,
     onClick:()-> Unit={}
 ){
+
+    val userName = user?.displayName?.split(" ")?.firstOrNull()?:"Usuario"
     Column(
 
     ) {
-        TopBar()
+        TopBar(userName=userName, navController)
         Balance()
         Row(
             horizontalArrangement = Arrangement.SpaceAround,
@@ -78,13 +83,13 @@ fun PantallaPrincipal(
                 text = "Historial",
                 icon = painterResource(R.drawable.fluent__history_32_filled),
                 tint = Color.Blue,
-                onClick = onNavigateToHistorial  // Aquí usamos el callback
+                onClick = {}  // Aquí usamos el callback
             )
             Botones(
                 text = "Estadisticas",
                 icon = painterResource(R.drawable.lucide__chart_column),
                 tint = Color.Magenta,
-                onClick = onNavigateToEstadisticas  // Ahora este callback existe
+                onClick = {}  // Ahora este callback existe
             )
         }
         Historial()
@@ -93,7 +98,7 @@ fun PantallaPrincipal(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TopBar(){
+fun TopBar(userName: String, navController: NavController){
     TopAppBar(
         modifier = Modifier
             .height(100.dp)
@@ -132,10 +137,15 @@ fun TopBar(){
                     Spacer(Modifier.width(9.dp))
                     Column() {
                         Text("FinanzApp", style = MaterialTheme.typography.titleLarge)
-                        Text("Bienvenido de nuevo", style= MaterialTheme.typography.titleSmall,color=Color.Gray)
+                        Text("Bienvenido $userName", style= MaterialTheme.typography.titleSmall,color=Color.Gray)
                     }
                 }
-                IconButton (onClick = {}){
+                IconButton (onClick = {
+                    FirebaseAuth.getInstance().signOut()
+                    navController.navigate("Login") {
+                        popUpTo("Principal") { inclusive = true }
+                    }
+                }){
                     Icon(
                         painter=painterResource( R.drawable.ic__outline_logout),
                         contentDescription="Logout"

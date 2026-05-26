@@ -2,8 +2,10 @@ package com.example.finanzapp
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -34,6 +37,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -49,27 +53,87 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.fromColorLong
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.ModifierLocalBeyondBoundsLayout
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.integerResource
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
+import com.google.android.gms.common.api.ApiException
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import com.google.firebase.auth.GoogleAuthCredential
+import com.google.firebase.auth.GoogleAuthProvider
 
-@Preview(showSystemUi = true)
+
 @Composable
 fun LoginScreen(
+    auth: FirebaseAuth,
     modifier: Modifier=Modifier,
-    onClick:()-> Unit={}
+    navController: NavController,
+    onCreateAccountClick: () -> Unit = {}
 ){
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val token= stringResource(R.string.default_web_client_id)
+    var currentUser by remember { mutableStateOf(auth.currentUser) }
+
+    var showDialog by remember { mutableStateOf(false) }
+    var message by remember {mutableStateOf("")}
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts
+            .StartActivityForResult()
+    ){
+        val task= GoogleSignIn.getSignedInAccountFromIntent(it.data)
+        val account=task.getResult(ApiException::class.java)
+        val credential= GoogleAuthProvider.getCredential(
+            account.idToken,
+            null
+        )
+
+        auth
+            .signInWithCredential(credential)
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful){
+                    message="Inicio de Sesion exitoso"
+                    navController.navigate("Principal") {
+                        popUpTo("Login") { inclusive = true }
+                    }
+                    currentUser = auth.currentUser
+                }else{
+                    showDialog=true
+                    val exception= task.exception
+                    message = when (exception) {
+                        is ApiException -> when (exception.statusCode) {
+                            GoogleSignInStatusCodes.SIGN_IN_CANCELLED -> "Inicio de sesión cancelado"
+                            GoogleSignInStatusCodes.SIGN_IN_FAILED -> "Error al iniciar sesión con Google"
+                            GoogleSignInStatusCodes.NETWORK_ERROR -> "Error de red. Verifica tu conexión"
+                            else -> "Error: ${exception.message}"
+                        }
+                        is FirebaseAuthInvalidCredentialsException -> "Credenciales de Google inválidas"
+                        else -> "Error: ${exception?.message}"
+                    }
+                }
+                currentUser=auth.currentUser
+            }
+    }
 
     val colorComponents=TextFieldDefaults.colors(
         focusedContainerColor = Color(0xFFF3F3F5),
@@ -122,13 +186,15 @@ fun LoginScreen(
                 modifier=Modifier.padding(10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                val isEmailValid=email.matches(Regex("^(?=.*[A-Za-z])(?=.*[@])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\$"))
                 TextField(
                     value = email,
                     onValueChange = {email=it},
                     colors = colorComponents,
                     label ={Text("Correo Electrónico")},
                     placeholder = {Text("finanzapp@email.com")},
-                    modifier=modifierComponents
+                    modifier=modifierComponents,
+                    isError = !isEmailValid
 
                 )
                 Spacer(modifier=Modifier.width(10.dp))
@@ -162,7 +228,37 @@ fun LoginScreen(
                 )
 
                 Button(
-                    onClick = onClick,
+                    onClick = {
+                        auth
+                            .signInWithEmailAndPassword(email,password)
+                            .addOnCompleteListener {task ->
+                                if (task.isSuccessful) {
+                                    val user = auth.currentUser
+
+                                    if (user?.isEmailVerified == true) {
+                                        currentUser = auth.currentUser
+                                        navController.navigate("Principal") {
+                                            popUpTo("Login") { inclusive = true }
+                                        }
+                                    } else {
+                                        auth.signOut()
+                                        message = "Por favor, verifica tu correo electrónico antes de iniciar sesión. Revisa tu bandeja de entrada y spam."
+                                        showDialog = true
+                                    }
+                                }else{
+                                    message = when (task.exception) {
+                                        is FirebaseAuthInvalidCredentialsException -> "Correo o contraseña incorrectos"
+                                        is FirebaseAuthInvalidUserException -> "No existe cuenta con este correo"
+                                        else -> "Error: ${task.exception?.message}"
+                                    }
+
+                                    showDialog=true
+                                }
+
+                                currentUser=auth.currentUser
+                            }
+                    },
+                    enabled = email.isNotBlank() && password.isNotBlank(),
                     colors = ButtonDefaults.buttonColors(
                         colorResource(R.color.ic_launcher_background),
                         contentColor = Color.White
@@ -175,7 +271,7 @@ fun LoginScreen(
                         )
                 ) {Text("Entrar")}
                 OutlinedButton(
-                    onClick = onClick,
+                    onClick = onCreateAccountClick,
                     border= BorderStroke(2.dp,Color(0xFFF3F3F5)),
                     colors = ButtonDefaults.buttonColors(
                         Color.White,
@@ -188,7 +284,20 @@ fun LoginScreen(
                         )
                 ) {Text("Crear Cuenta")}
                 OutlinedButton(
-                    onClick = onClick,
+                    onClick = {
+                        val options = GoogleSignInOptions.Builder(
+                            GoogleSignInOptions.DEFAULT_SIGN_IN
+                        )
+                            .requestIdToken(token)
+                            .requestEmail()
+                            .build()
+
+                        val googleSingInClient= GoogleSignIn.getClient(
+                            context,
+                            options
+                        )
+                        launcher.launch(googleSingInClient.signInIntent)
+                    },
                     border = BorderStroke(2.dp, Color(0xFFF3F3F5)),
                     colors = ButtonDefaults.buttonColors(
                         Color.White,
@@ -218,16 +327,53 @@ fun LoginScreen(
                         Text("Iniciar sesión con Google")
                     }
                 }
+                Spacer(Modifier.height(8.dp))
                 ClickableText(
                     text = AnnotatedString("¿Olvidaste la contraseña?"),
                     style= TextStyle(
                         color=colorResource(R.color.ic_launcher_background),
                         textDecoration = TextDecoration.Underline
                     )
-                ) { }
+                ) { navController.navigate("RecuperarContra")}
             }
         }
 
+        if (showDialog) {
+            AlertDialog(
+                onDismissRequest = { showDialog = false },
+                title = {
+                    Text(
+                        text = if (message.contains("exitoso") || message.contains("Correcto")) "Éxito" else "Error",
+                        fontWeight = FontWeight.Bold,
+                        color = if (message.contains("exitoso") || message.contains("Correcto"))
+                            Color(0xFF4CAF50) else Color(0xFFF44336)
+                    )
+                },
+                text = {
+                    Text(text = message)
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showDialog = false
+                            if (message.contains("exitoso")|| message.contains("Correcto")){
+                                currentUser = auth.currentUser
+                                navController.navigate("Principal") {
+                                    popUpTo("Login") { inclusive = true }
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = Color(0xFF6200EE)
+                        )
+                    ) {
+                        Text("Aceptar")
+                    }
+                },
+                containerColor = Color.White,
+                shape = RoundedCornerShape(16.dp)
+            )
+        }
     }
 }
 

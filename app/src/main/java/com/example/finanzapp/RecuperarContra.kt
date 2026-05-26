@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -32,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -50,14 +52,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 
-@Preview(showSystemUi = true)
 @Composable
 fun RecuperarContra(
-    modifier: Modifier=Modifier,
-    onClick:()-> Unit={}
+    auth: FirebaseAuth,
+    navController: NavController,
+    modifier: Modifier=Modifier
 ){
+    var showDialog by remember { mutableStateOf(false) }
+    var message by remember {mutableStateOf("")}
     var email by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
     val modifierComponents= Modifier
         .fillMaxWidth()
         .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -73,11 +82,13 @@ fun RecuperarContra(
     )
 
     Column(
-        modifier=modifier.fillMaxSize().imePadding(),
+        modifier=modifier
+            .fillMaxSize()
+            .imePadding(),
         verticalArrangement = Arrangement.Center,
     ) {
         OutlinedButton(
-            onClick={},
+            onClick={ navController.navigateUp()},
             border= BorderStroke(2.dp,Color(0xFFF3F3F5)),
             colors = ButtonDefaults.buttonColors(
                 Color.White,
@@ -128,20 +139,48 @@ fun RecuperarContra(
                 Spacer(modifier = Modifier.height(5.dp))
                 Text("Ingresa tu correo y te enviaremos instrucciones para recuperarla", style= MaterialTheme.typography.titleSmall,color=Color.Gray, textAlign = TextAlign.Center)
                 Spacer(modifier = Modifier.height(10.dp))
+                val isEmailValid=email.matches(Regex("^(?=.*[A-Za-z])(?=.*[@])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\$"))
                 TextField(
                     value = email,
                     onValueChange = {email=it},
                     colors = colorComponents,
                     label ={Text("Correo Electrónico")},
                     placeholder = {Text("finanzapp@email.com")},
-                    modifier=modifierComponents
+                    modifier=modifierComponents,
+                    isError = !isEmailValid
                 )
                 Button(
-                    onClick = onClick,
+                    onClick = {
+                        if (email.isBlank() || !isEmailValid) {
+                            message = "Por favor, ingresa un correo electrónico válido."
+                            showDialog = true
+                            return@Button
+                        }
+
+                        isLoading = true
+
+                        auth.sendPasswordResetEmail(email)
+                            .addOnCompleteListener { resetTask ->
+                                isLoading = false
+
+                                if (resetTask.isSuccessful) {
+                                    message = "Correo de restablecimiento enviado a $email. Revisa tu bandeja de entrada."
+                                    showDialog = true
+                                } else {
+                                    message = when (resetTask.exception) {
+                                        is FirebaseAuthInvalidCredentialsException -> "Correo electrónico inválido"
+                                        is FirebaseAuthInvalidUserException -> "No existe una cuenta con este correo electrónico"
+                                        else -> "Error: ${resetTask.exception?.message}"
+                                    }
+                                    showDialog = true
+                                }
+                            }
+                    },
                     colors = ButtonDefaults.buttonColors(
                         colorResource(R.color.ic_launcher_background),
                         contentColor = Color.White
                     ),
+                    enabled = email.isNotBlank(),
                     modifier = modifierComponents
                         .shadow(
                             elevation = 4.dp, // Altura de la sombra
@@ -149,6 +188,69 @@ fun RecuperarContra(
                             clip = true // Para que no recorte la sombra
                         )
                 ) {Text("Enviar Instrucciones")}
+                if (showDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showDialog = false },
+                        title = {
+                            val isSuccess = message.contains("enviado")
+                            val isWarning = message.contains("Google") || message.contains("actualmente")
+
+                            Text(
+                                text = when {
+                                    isSuccess -> "¡Correo Enviado!"
+                                    isWarning -> "Atención"
+                                    else -> "Error"
+                                },
+                                fontWeight = FontWeight.Bold,
+                                color = when {
+                                    isSuccess -> Color(0xFF4CAF50)
+                                    isWarning -> Color(0xFFFF9800)
+                                    else -> Color(0xFFF44336)
+                                }
+                            )
+                        },
+                        text = {
+                            Text(text = message)
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    showDialog = false
+                                    if (message.contains("enviado") && !message.contains("Error")) {
+                                        navController.navigateUp()
+                                    }
+                                },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = Color(0xFF6200EE)
+                                )
+                            ) {
+                                Text("Aceptar")
+                            }
+                        },
+                        dismissButton = if (message.contains("Google") || message.contains("actualmente")) {
+                            {
+                                TextButton(
+                                    onClick = {
+                                        showDialog = false
+                                        auth.sendPasswordResetEmail(email)
+                                            .addOnCompleteListener { resetTask ->
+                                                if (resetTask.isSuccessful) {
+                                                    message = "Correo de restablecimiento enviado a $email. Ahora podrás crear una contraseña para tu cuenta."
+                                                } else {
+                                                    message = "Error: ${resetTask.exception?.message}"
+                                                }
+                                                showDialog = true
+                                            }
+                                    }
+                                ) {
+                                    Text("Continuar")
+                                }
+                            }
+                        } else null,
+                        containerColor = Color.White,
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                }
             }
         }
     }

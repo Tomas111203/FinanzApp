@@ -54,6 +54,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.navigation.NavController
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
@@ -64,6 +65,7 @@ import com.google.firebase.auth.UserProfileChangeRequest
 @Composable
 fun CrearCuenta(
     auth: FirebaseAuth,
+    navController: NavController,
     modifier: Modifier=Modifier,
     onClick:()-> Unit={}
 ){
@@ -98,7 +100,9 @@ fun CrearCuenta(
         verticalArrangement = Arrangement.Center,
     ) {
         OutlinedButton(
-            onClick={},
+            onClick={
+                navController.navigateUp()
+            },
             border= BorderStroke(2.dp,Color(0xFFF3F3F5)),
             colors = ButtonDefaults.buttonColors(
                 Color.White,
@@ -288,7 +292,12 @@ fun CrearCuenta(
                     },
                     confirmButton = {
                         TextButton(
-                            onClick = { showDialog = false },
+                            onClick = {
+                                showDialog = false
+                                if (message.contains("exitoso")|| message.contains("Correcto")){
+                                    navController.navigateUp()
+                                }
+                            },
                             colors = ButtonDefaults.textButtonColors(
                                 contentColor = Color(0xFF6200EE)
                             )
