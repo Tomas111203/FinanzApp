@@ -41,13 +41,13 @@ import kotlin.toString
 
 class MainActivity : ComponentActivity() {
 
-    private  lateinit var auth: FirebaseAuth
+    private lateinit var auth: FirebaseAuth
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        auth= Firebase.auth
+        auth = Firebase.auth
         setContent {
-            FinanzAppTheme(){
+            FinanzAppTheme() {
                 ForceLightTheme {
                     App(auth = auth)
                 }
@@ -57,35 +57,64 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun App(auth: FirebaseAuth){
+fun App(auth: FirebaseAuth) {
     val navController = rememberNavController()
     val currentUser by remember { mutableStateOf(auth.currentUser) }
+
     NavHost(
         navController = navController,
         startDestination = if (currentUser != null) "Principal" else "Login"
     ) {
+        // Pantallas de autenticación
         composable("Login") {
             LoginApp(
-            auth,
-                navController=navController
+                auth = auth,
+                navController = navController
             )
         }
-        composable("CrearCuenta"){
+
+        composable("CrearCuenta") {
             CrearCuenta(
-                auth,
-                navController
+                auth = auth,
+                navController = navController
             )
         }
-        composable(route="Principal"){
-            PantallaPrincipal(
-                navController=navController,
-                user= auth.currentUser
-            )
-        }
-        composable(route="RecuperarContra") {
+
+        composable("RecuperarContra") {
             RecuperarContra(
-                auth,
-                navController
+                auth = auth,
+                navController = navController
+            )
+        }
+
+        // Pantalla principal
+        composable("Principal") {
+            PantallaPrincipal(
+                navController = navController,
+                user = auth.currentUser
+            )
+        }
+
+        // NUEVAS RUTAS AGREGADAS
+
+        // Ruta para Agregar Transacción
+        composable("AgregarTransaccion") {
+            AgregarTransaccionScreen(
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        // Ruta para Historial
+        composable("Historial") {
+            HistorialScreen(
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        // Ruta para Estadísticas
+        composable("Estadisticas") {
+            EstadisticasScreen(
+                onBackClick = { navController.popBackStack() }
             )
         }
     }
@@ -95,11 +124,11 @@ fun App(auth: FirebaseAuth){
 fun LoginApp(
     auth: FirebaseAuth,
     navController: NavController
-){
+) {
     LoginScreen(
-        auth,
+        auth = auth,
         modifier = Modifier.padding(),
-        navController= navController,
+        navController = navController,
         onCreateAccountClick = { navController.navigate("CrearCuenta") },
     )
 }
@@ -116,4 +145,3 @@ fun ForceLightTheme(
         content()
     }
 }
-

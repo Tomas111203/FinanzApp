@@ -1,3 +1,4 @@
+
 package com.example.finanzapp
 
 import androidx.compose.foundation.BorderStroke

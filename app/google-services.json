@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "408787895035-07le5420laq3jcmmlu597ek6b0j258vu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.finanzapp",
+            "certificate_hash": "8cbb4e96d8d9f384355a5d0f9dbcd9bf6770e986"
+          }
+        },
+        {
           "client_id": "408787895035-37cj8p39226m7vmbvd48fnnda0395f1v.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

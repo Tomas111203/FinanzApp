@@ -24,47 +24,29 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.launch
 import java.text.NumberFormat
+import java.text.SimpleDateFormat
 import java.util.*
-
-// Modelo de datos
-data class Transaction(
-    val id: Int,
-    val name: String,
-    val amount: Double,
-    val category: String,
-    val date: String,
-    val type: String // "income" o "expense"
-)
-
-data class TransactionInput(
-    val name: String,
-    val amount: Double,
-    val category: String,
-    val date: String,
-    val type: String
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistorialScreen(
     onBackClick: () -> Unit = {}
 ) {
-    // Datos mock
-    var transactions by remember {
-        mutableStateOf(
-            listOf(
-                Transaction(1, "Supermercado", 450.5, "Alimentación", "28 Mar 2026", "expense"),
-                Transaction(2, "Salario", 18000.0, "Ingreso", "25 Mar 2026", "income"),
-                Transaction(3, "Gasolina", 280.0, "Transporte", "27 Mar 2026", "expense"),
-                Transaction(4, "Netflix", 129.0, "Entretenimiento", "26 Mar 2026", "expense"),
-                Transaction(5, "Farmacia", 320.5, "Salud", "24 Mar 2026", "expense"),
-                Transaction(6, "Uber", 85.0, "Transporte", "23 Mar 2026", "expense"),
-                Transaction(7, "Restaurante", 650.0, "Alimentación", "22 Mar 2026", "expense"),
-                Transaction(8, "Freelance", 2500.0, "Ingreso", "20 Mar 2026", "income")
-            )
-        )
-    }
+    val repository = remember { TransactionRepository() }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Estados
+    var transactions by remember { mutableStateOf<List<FirestoreTransaction>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var searchTerm by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf("Todas las categorías") }
+    var showCategoryDropdown by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var transactionType by remember { mutableStateOf("income") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showErrorDialog by remember { mutableStateOf(false) }
 
     val categories = listOf(
         "Todas las categorías",
@@ -73,44 +55,106 @@ fun HistorialScreen(
         "Entretenimiento",
         "Salud",
         "Servicios",
-        "Ingreso"
+        "Educación",
+        "Ropa",
+        "Ingreso",
+        "Otros"
     )
 
-    var searchTerm by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf("Todas las categorías") }
-    var showCategoryDropdown by remember { mutableStateOf(false) }
-    var showAddDialog by remember { mutableStateOf(false) }
-    var transactionType by remember { mutableStateOf("income") }
+    // Cargar transacciones al iniciar
+    LaunchedEffect(Unit) {
+        try {
+            transactions = repository.getAllTransactions()
+        } catch (e: Exception) {
+            errorMessage = "Error al cargar transacciones: ${e.message}"
+            showErrorDialog = true
+        } finally {
+            isLoading = false
+        }
+    }
 
+    // Filtrar transacciones según búsqueda y categoría
     val filteredTransactions = transactions.filter { transaction ->
-        val matchesSearch = transaction.name.lowercase().contains(searchTerm.lowercase())
+        val matchesSearch = transaction.name.lowercase()
+            .contains(searchTerm.lowercase()) ||
+                transaction.category.lowercase()
+                    .contains(searchTerm.lowercase())
         val matchesCategory = selectedCategory == "Todas las categorías" ||
                 transaction.category == selectedCategory
         matchesSearch && matchesCategory
     }
 
-    val totalIncome = transactions.filter { it.type == "income" }.sumOf { it.amount }
-    val totalExpense = transactions.filter { it.type == "expense" }.sumOf { it.amount }
+    // Calcular totales
+    val totalIncome = transactions
+        .filter { it.type == "income" }
+        .sumOf { it.amount }
+    val totalExpense = transactions
+        .filter { it.type == "expense" }
+        .sumOf { it.amount }
     val totalBalance = totalIncome - totalExpense
 
-    val currencyFormatter = remember { NumberFormat.getNumberInstance(Locale("es", "MX")) }
+    val currencyFormatter = remember {
+        NumberFormat.getNumberInstance(Locale("es", "MX"))
+    }
+    val dateFormatter = remember {
+        SimpleDateFormat("dd MMM yyyy", Locale("es", "MX"))
+    }
 
+    // Diálogo para agregar transacción
     if (showAddDialog) {
         AddTransactionDialog(
             type = transactionType,
             onDismiss = { showAddDialog = false },
-            onAdd = { newTransaction ->
-                val newId = (transactions.maxOfOrNull { it.id } ?: 0) + 1
-                transactions = transactions + Transaction(
-                    id = newId,
-                    name = newTransaction.name,
-                    amount = newTransaction.amount,
-                    category = newTransaction.category,
-                    date = newTransaction.date,
-                    type = newTransaction.type
-                )
-                showAddDialog = false
+            onAdd = { transactionInput ->
+                coroutineScope.launch {
+                    try {
+                        val firestoreTransaction = FirestoreTransaction(
+                            name = transactionInput.name,
+                            amount = transactionInput.amount,
+                            category = transactionInput.category,
+                            date = Date(),
+                            type = transactionInput.type,
+                            description = transactionInput.description,
+                            paymentMethod = transactionInput.paymentMethod
+                        )
+
+                        val result = repository.addTransaction(firestoreTransaction)
+                        result.onSuccess {
+                            // Recargar transacciones después de agregar
+                            transactions = repository.getAllTransactions()
+                            showAddDialog = false
+                        }.onFailure { e ->
+                            errorMessage = "Error al guardar: ${e.message}"
+                            showErrorDialog = true
+                        }
+                    } catch (e: Exception) {
+                        errorMessage = "Error: ${e.message}"
+                        showErrorDialog = true
+                    }
+                }
             }
+        )
+    }
+
+    // Diálogo de error
+    if (showErrorDialog && errorMessage != null) {
+        AlertDialog(
+            onDismissRequest = { showErrorDialog = false },
+            title = {
+                Text(
+                    text = "Error",
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFF44336)
+                )
+            },
+            text = { Text(errorMessage!!) },
+            confirmButton = {
+                TextButton(onClick = { showErrorDialog = false }) {
+                    Text("Aceptar")
+                }
+            },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(16.dp)
         )
     }
 
@@ -145,6 +189,7 @@ fun HistorialScreen(
                         color = Color.Black,
                         modifier = Modifier.weight(1f)
                     )
+                    // Botones para agregar transacciones
                     IconButton(
                         onClick = {
                             transactionType = "income"
@@ -175,186 +220,218 @@ fun HistorialScreen(
         },
         containerColor = Color(0xFFF0FDF4)
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp, vertical = 16.dp)
-        ) {
-            // Campo de búsqueda
-            OutlinedTextField(
-                value = searchTerm,
-                onValueChange = { searchTerm = it },
-                placeholder = { Text("Buscar transacción...") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Buscar",
-                        tint = Color.Gray
-                    )
-                },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Filtro por categoría (simplificado)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
+        if (isLoading) {
+            // Mostrar indicador de carga
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.FilterList,
-                    contentDescription = "Filtrar",
-                    tint = Color.Gray,
-                    modifier = Modifier.size(20.dp)
+                CircularProgressIndicator(
+                    color = Color(0xFF16A34A)
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
+            ) {
+                // Campo de búsqueda
+                OutlinedTextField(
+                    value = searchTerm,
+                    onValueChange = { searchTerm = it },
+                    placeholder = { Text("Buscar transacción...") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Buscar",
+                            tint = Color.Gray
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
                 )
 
-                Box(modifier = Modifier.weight(1f)) {
-                    Surface(
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Filtro por categoría
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FilterList,
+                        contentDescription = "Filtrar",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(20.dp)
+                    )
+
+                    Box(modifier = Modifier.weight(1f)) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .clickable { showCategoryDropdown = true }
+                                .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color.White
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = selectedCategory,
+                                    color = if (selectedCategory == "Todas las categorías")
+                                        Color.Gray else Color.Black
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Desplegar",
+                                    tint = Color.Gray
+                                )
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = showCategoryDropdown,
+                            onDismissRequest = { showCategoryDropdown = false },
+                            modifier = Modifier.fillMaxWidth(0.9f)
+                        ) {
+                            categories.forEach { category ->
+                                DropdownMenuItem(
+                                    text = { Text(category) },
+                                    onClick = {
+                                        selectedCategory = category
+                                        showCategoryDropdown = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Tarjeta de resumen
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(4.dp)
+                ) {
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
-                            .clickable { showCategoryDropdown = true }
-                            .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color.White
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = selectedCategory,
-                                color = if (selectedCategory == "Todas las categorías")
-                                    Color.Gray else Color.Black
-                            )
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = "Desplegar",
-                                tint = Color.Gray
-                            )
-                        }
-                    }
-
-                    DropdownMenu(
-                        expanded = showCategoryDropdown,
-                        onDismissRequest = { showCategoryDropdown = false },
-                        modifier = Modifier.fillMaxWidth(0.9f)
-                    ) {
-                        categories.forEach { category ->
-                            DropdownMenuItem(
-                                text = { Text(category) },
-                                onClick = {
-                                    selectedCategory = category
-                                    showCategoryDropdown = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Tarjeta de resumen
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(4.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Ingresos", fontSize = 12.sp, color = Color.Gray)
-                        Text(
-                            text = "+$${currencyFormatter.format(totalIncome)}",
-                            color = Color(0xFF16A34A),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Gastos", fontSize = 12.sp, color = Color.Gray)
-                        Text(
-                            text = "-$${currencyFormatter.format(totalExpense)}",
-                            color = Color(0xFFDC2626),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Balance", fontSize = 12.sp, color = Color.Gray)
-                        Text(
-                            text = "$${currencyFormatter.format(totalBalance)}",
-                            color = if (totalBalance >= 0) Color(0xFF16A34A) else Color(0xFFDC2626),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Lista de transacciones
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .shadow(4.dp, RoundedCornerShape(16.dp)),
-                shape = RoundedCornerShape(16.dp),
-                color = Color.White
-            ) {
-                if (filteredTransactions.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Outlined.Receipt,
-                                contentDescription = null,
-                                tint = Color.Gray,
-                                modifier = Modifier.size(64.dp)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Ingresos", fontSize = 12.sp, color = Color.Gray)
                             Text(
-                                text = "No se encontraron transacciones",
-                                color = Color.Gray,
+                                text = "+$${currencyFormatter.format(totalIncome)}",
+                                color = Color(0xFF16A34A),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Gastos", fontSize = 12.sp, color = Color.Gray)
+                            Text(
+                                text = "-$${currencyFormatter.format(totalExpense)}",
+                                color = Color(0xFFDC2626),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Balance", fontSize = 12.sp, color = Color.Gray)
+                            Text(
+                                text = "$${currencyFormatter.format(totalBalance)}",
+                                color = if (totalBalance >= 0) Color(0xFF16A34A) else Color(0xFFDC2626),
+                                fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp
                             )
                         }
                     }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(filteredTransactions) { transaction ->
-                            TransactionItem(
-                                transaction = transaction,
-                                currencyFormatter = currencyFormatter,
-                                onDelete = {
-                                    transactions = transactions.filter { it.id != transaction.id }
-                                }
-                            )
-                            if (transaction != filteredTransactions.last()) {
-                                Divider(
-                                    color = Color(0xFFE5E7EB),
-                                    thickness = 1.dp,
-                                    modifier = Modifier.padding(horizontal = 16.dp)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Lista de transacciones
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .shadow(4.dp, RoundedCornerShape(16.dp)),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.White
+                ) {
+                    if (filteredTransactions.isEmpty()) {
+                        // Estado vacío
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Receipt,
+                                    contentDescription = null,
+                                    tint = Color.Gray,
+                                    modifier = Modifier.size(64.dp)
                                 )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "No se encontraron transacciones",
+                                    color = Color.Gray,
+                                    fontSize = 16.sp
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(
+                                items = filteredTransactions,
+                                key = { it.id }
+                            ) { transaction ->
+                                TransactionItem(
+                                    transaction = transaction,
+                                    currencyFormatter = currencyFormatter,
+                                    dateFormatter = dateFormatter,
+                                    onDelete = {
+                                        coroutineScope.launch {
+                                            try {
+                                                val result = repository.deleteTransaction(transaction.id)
+                                                result.onSuccess {
+                                                    transactions = repository.getAllTransactions()
+                                                }.onFailure { e ->
+                                                    errorMessage = "Error al eliminar: ${e.message}"
+                                                    showErrorDialog = true
+                                                }
+                                            } catch (e: Exception) {
+                                                errorMessage = "Error: ${e.message}"
+                                                showErrorDialog = true
+                                            }
+                                        }
+                                    }
+                                )
+                                if (transaction != filteredTransactions.last()) {
+                                    HorizontalDivider(
+                                        color = Color(0xFFE5E7EB),
+                                        thickness = 1.dp,
+                                        modifier = Modifier.padding(horizontal = 16.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -364,10 +441,12 @@ fun HistorialScreen(
     }
 }
 
+// Componente individual de transacción
 @Composable
 fun TransactionItem(
-    transaction: Transaction,
+    transaction: FirestoreTransaction,
     currencyFormatter: NumberFormat,
+    dateFormatter: SimpleDateFormat,
     onDelete: () -> Unit
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -375,7 +454,12 @@ fun TransactionItem(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Eliminar transacción") },
+            title = {
+                Text(
+                    text = "Eliminar transacción",
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = { Text("¿Deseas eliminar \"${transaction.name}\"?") },
             confirmButton = {
                 TextButton(onClick = {
@@ -389,7 +473,9 @@ fun TransactionItem(
                 TextButton(onClick = { showDeleteDialog = false }) {
                     Text("Cancelar")
                 }
-            }
+            },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(16.dp)
         )
     }
 
@@ -444,11 +530,19 @@ fun TransactionItem(
                     color = Color.Gray
                 )
                 Text(
-                    text = transaction.date,
+                    text = dateFormatter.format(transaction.date),
                     fontSize = 11.sp,
                     color = Color.Gray,
                     modifier = Modifier.padding(top = 2.dp)
                 )
+                if (transaction.description.isNotBlank()) {
+                    Text(
+                        text = transaction.description,
+                        fontSize = 11.sp,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
             }
         }
 
@@ -464,6 +558,18 @@ fun TransactionItem(
     }
 }
 
+// Modelo para el diálogo
+data class TransactionInput(
+    val name: String,
+    val amount: Double,
+    val category: String,
+    val type: String,
+    val description: String = "",
+    val paymentMethod: String = ""
+)
+
+// Diálogo para agregar transacción
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddTransactionDialog(
     type: String,
@@ -473,12 +579,21 @@ fun AddTransactionDialog(
     var name by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("") }
-    var date by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var paymentMethod by remember { mutableStateOf("") }
+    var showCategoryDropdown by remember { mutableStateOf(false) }
+    var showPaymentDropdown by remember { mutableStateOf(false) }
 
-    val currentDate = remember {
-        val formatter = java.text.SimpleDateFormat("dd MMM yyyy", Locale("es", "MX"))
-        formatter.format(java.util.Date())
-    }
+    val categories = listOf(
+        "Alimentación", "Transporte", "Entretenimiento",
+        "Salud", "Servicios", "Educación", "Ropa", "Otros"
+    )
+    val paymentMethods = listOf("Efectivo", "Tarjeta de Débito", "Tarjeta de Crédito", "Transferencia")
+
+    val isValid = name.isNotBlank() &&
+            amount.isNotBlank() &&
+            (amount.toDoubleOrNull() ?: 0.0) > 0 &&
+            category.isNotBlank()
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -515,25 +630,111 @@ fun AddTransactionDialog(
                     placeholder = { Text("0.00") },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true
+                    singleLine = true,
+                    leadingIcon = { Text("$") }
                 )
 
-                OutlinedTextField(
-                    value = category,
-                    onValueChange = { category = it },
-                    label = { Text("Categoría") },
-                    placeholder = { Text("Alimentación, Transporte...") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+                // Selector de categoría
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .clickable { showCategoryDropdown = true }
+                            .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color.White
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (category.isEmpty()) "Selecciona categoría" else category,
+                                color = if (category.isEmpty()) Color.Gray else Color.Black
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Desplegar",
+                                tint = Color.Gray
+                            )
+                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = showCategoryDropdown,
+                        onDismissRequest = { showCategoryDropdown = false },
+                        modifier = Modifier.fillMaxWidth(0.9f)
+                    ) {
+                        categories.forEach { cat ->
+                            DropdownMenuItem(
+                                text = { Text(cat) },
+                                onClick = {
+                                    category = cat
+                                    showCategoryDropdown = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Selector de método de pago
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .clickable { showPaymentDropdown = true }
+                            .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color.White
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (paymentMethod.isEmpty()) "Método de pago" else paymentMethod,
+                                color = if (paymentMethod.isEmpty()) Color.Gray else Color.Black
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Desplegar",
+                                tint = Color.Gray
+                            )
+                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = showPaymentDropdown,
+                        onDismissRequest = { showPaymentDropdown = false },
+                        modifier = Modifier.fillMaxWidth(0.9f)
+                    ) {
+                        paymentMethods.forEach { method ->
+                            DropdownMenuItem(
+                                text = { Text(method) },
+                                onClick = {
+                                    paymentMethod = method
+                                    showPaymentDropdown = false
+                                }
+                            )
+                        }
+                    }
+                }
 
                 OutlinedTextField(
-                    value = date,
-                    onValueChange = { date = it },
-                    label = { Text("Fecha") },
-                    placeholder = { Text(currentDate) },
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Descripción (opcional)") },
+                    placeholder = { Text("Agrega una descripción...") },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    maxLines = 3
                 )
 
                 Row(
@@ -550,25 +751,26 @@ fun AddTransactionDialog(
 
                     Button(
                         onClick = {
-                            if (name.isNotBlank() && amount.isNotBlank() && category.isNotBlank()) {
+                            if (isValid) {
                                 val amountValue = amount.toDoubleOrNull() ?: 0.0
-                                if (amountValue > 0) {
-                                    onAdd(
-                                        TransactionInput(
-                                            name = name,
-                                            amount = amountValue,
-                                            category = category,
-                                            date = date.ifBlank { currentDate },
-                                            type = type
-                                        )
+                                onAdd(
+                                    TransactionInput(
+                                        name = name,
+                                        amount = amountValue,
+                                        category = category,
+                                        type = type,
+                                        description = description,
+                                        paymentMethod = paymentMethod
                                     )
-                                }
+                                )
                             }
                         },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (type == "income") Color(0xFF16A34A) else Color(0xFFDC2626)
-                        )
+                            containerColor = if (type == "income")
+                                Color(0xFF16A34A) else Color(0xFFDC2626)
+                        ),
+                        enabled = isValid
                     ) {
                         Text("Guardar")
                     }

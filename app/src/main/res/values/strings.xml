@@ -1,3 +1,7 @@
 <resources>
-    <string name="app_name">FinanzApp</string>
+    <string name="app_name" translatable="false">FinanzApp</string>
+
+    <string name="default_web_client_id" translatable="false">
+        408787895035-smsu3jq34api79at1r1mn2f5bhsja6uu.apps.googleusercontent.com
+    </string>
 </resources>
