@@ -19,11 +19,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,12 +34,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,6 +54,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+import java.util.Date
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,6 +70,21 @@ fun AgregarTransaccionScreen(
     var selectedCategory by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var showCategoryDropdown by remember { mutableStateOf(false) }
+
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    val transactionRepository = remember { TransactionRepository() }
+
+    // Mostrar Snackbar cuando hay error
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            errorMessage = null
+        }
+    }
 
     val categories = listOf(
         "Alimentación", "Transporte", "Entretenimiento",
@@ -105,7 +127,8 @@ fun AgregarTransaccionScreen(
                 }
             }
         },
-        containerColor = Color(0xFFF0FDF4)
+        containerColor = Color(0xFFF0FDF4),
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -115,209 +138,124 @@ fun AgregarTransaccionScreen(
                 .padding(horizontal = 20.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            Text(
-                text = "Tipo de transacción",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.Gray
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                FilterChip(
-                    modifier = Modifier.weight(1f),
-                    selected = selectedType == "expense",
-                    onClick = { selectedType = "expense" },
-                    label = {
-                        Text(
-                            "Gasto",
-                            color = if (selectedType == "expense") Color.White else Color(0xFFDC2626),
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 16.sp
-                        )
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = Color(0xFFDC2626),
-                        selectedLabelColor = Color.White,
-                        disabledContainerColor = Color(0xFFFEE2E2),
-                        disabledLabelColor = Color(0xFFDC2626)
-                    )
-                )
-
-                FilterChip(
-                    modifier = Modifier.weight(1f),
-                    selected = selectedType == "income",
-                    onClick = { selectedType = "income" },
-                    label = {
-                        Text(
-                            "Ingreso",
-                            color = if (selectedType == "income") Color.White else Color(0xFF16A34A),
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 16.sp
-                        )
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = Color(0xFF16A34A),
-                        selectedLabelColor = Color.White,
-                        disabledContainerColor = Color(0xFFDCFCE7),
-                        disabledLabelColor = Color(0xFF16A34A)
-                    )
-                )
-            }
-
-            Text(
-                text = "Monto",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.Gray
-            )
-
-            OutlinedTextField(
-                value = amount,
-                onValueChange = { amount = it },
-                placeholder = { Text("$ 0.00") },
-                leadingIcon = { Text("$", fontSize = 20.sp, fontWeight = FontWeight.Bold) },
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp)
-            )
-
-            Text(
-                text = "Método de pago",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.Gray
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                paymentMethods.forEach { method ->
-                    FilterChip(
-                        modifier = Modifier.weight(1f),
-                        selected = selectedPaymentMethod == method,
-                        onClick = { selectedPaymentMethod = method },
-                        label = {
-                            Text(method, fontSize = 12.sp)
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFF3B82F6),
-                            selectedLabelColor = Color.White,
-                            disabledContainerColor = Color(0xFFEFF6FF),
-                            disabledLabelColor = Color(0xFF3B82F6)
-                        )
-                    )
-                }
-            }
-
-            if (selectedPaymentMethod.isEmpty()) {
-                Text(
-                    text = "* Selecciona un método de pago",
-                    fontSize = 11.sp,
-                    color = Color(0xFFDC2626)
-                )
-            }
-
-            Text(
-                text = "Categoría",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.Gray
-            )
-
-            Box(modifier = Modifier.fillMaxWidth()) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .clickable { showCategoryDropdown = true }
-                        .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color.White
+            if (isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (selectedCategory.isEmpty()) "Selecciona una categoría" else selectedCategory,
-                            color = if (selectedCategory.isEmpty()) Color.Gray else Color.Black,
-                            fontSize = 14.sp
-                        )
-                        Icon(
-                            imageVector = Icons.Default.ArrowDropDown,
-                            contentDescription = "Desplegar",
-                            tint = Color.Gray
-                        )
-                    }
-                }
-
-                DropdownMenu(
-                    expanded = showCategoryDropdown,
-                    onDismissRequest = { showCategoryDropdown = false },
-                    modifier = Modifier.fillMaxWidth(0.9f)
-                ) {
-                    categories.forEach { category ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(category, fontSize = 14.sp)
-                            },
-                            onClick = {
-                                selectedCategory = category
-                                showCategoryDropdown = false
-                            }
-                        )
-                    }
+                    CircularProgressIndicator()
                 }
             }
 
-            Text(
-                text = "Descripción",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.Gray
-            )
 
-            OutlinedTextField(
-                value = description,
-                onValueChange = { description = it },
-                placeholder = { Text("Ej: Pago de nómina marzo") },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                maxLines = 3,
-                minLines = 2
-            )
 
             Button(
-                onClick = onSaveClick,
+                onClick = {
+                    if (validateForm(amount, selectedPaymentMethod, selectedCategory)) {
+                        isLoading = true
+                        scope.launch {
+                            saveTransaction(
+                                repository = transactionRepository,
+                                type = selectedType,
+                                amount = amount.toDouble(),
+                                paymentMethod = selectedPaymentMethod,
+                                category = selectedCategory,
+                                description = description,
+                                onSuccess = {
+                                    isLoading = false
+                                    onSaveClick()
+                                },
+                                onError = { errMsg ->
+                                    isLoading = false
+                                    errorMessage = errMsg // ← Aquí asignamos el error
+                                }
+                            )
+                        }
+                    } else {
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Por favor completa todos los campos obligatorios")
+                        }
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (selectedType == "income") Color(0xFF16A34A) else Color(0xFFDC2626)
-                )
+                ),
+                enabled = !isLoading
             ) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Guardar transacción",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = Color.White
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Guardar transacción",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
+    }
+}
+
+// Función para validar el formulario
+private fun validateForm(
+    amount: String,
+    paymentMethod: String,
+    category: String
+): Boolean {
+    val amountValue = amount.toDoubleOrNull()
+    return amountValue != null && amountValue > 0 &&
+            paymentMethod.isNotEmpty() &&
+            category.isNotEmpty()
+}
+
+// Función para guardar la transacción en Firestore
+private suspend fun saveTransaction(
+    repository: TransactionRepository,
+    type: String,
+    amount: Double,
+    paymentMethod: String,
+    category: String,
+    description: String,
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit
+) {
+    try {
+        // Crear objeto FirestoreTransaction
+        val transaction = FirestoreTransaction(
+            id = UUID.randomUUID().toString(), // Generar ID único
+            name = if (type == "income") "Ingreso" else "Gasto", // Puedes personalizar esto
+            amount = amount,
+            category = category,
+            date = Date(), // Fecha actual
+            type = type,
+            description = description,
+            paymentMethod = paymentMethod,
+            userId = "" // Se asignará automáticamente en el repositorio
+        )
+
+        // Guardar en Firestore
+        val result = repository.addTransaction(transaction)
+
+        if (result.isSuccess) {
+            onSuccess()
+        } else {
+            onError(result.exceptionOrNull()?.message ?: "Error al guardar la transacción")
+        }
+    } catch (e: Exception) {
+        onError(e.message ?: "Error inesperado al guardar")
     }
 }
 
