@@ -37,20 +37,17 @@ class TransactionViewModel : ViewModel() {
             try {
                 val transactions = repository.getAllTransactions()
                 println("[ViewModel] Transacciones obtenidas: ${transactions.size}")
-                transactions.forEach { t ->
-                    println("   - ID: ${t.id}, Nombre: ${t.name}, Monto: ${t.amount}, Tipo: ${t.type}")
-                }
                 _transactions.value = transactions
                 _categoryStats.value = repository.getCategoryStats()
                 _monthlyStats.value = repository.getMonthlyStats()
                 _errorMessage.value = null
-                println("[ViewModel] Datos cargados correctamente")
             } catch (e: Exception) {
                 println("[ViewModel] Error: ${e.message}")
                 _errorMessage.value = e.message ?: "Error al cargar datos"
+                // En caso de error, mantener los datos anteriores
             } finally {
                 _isLoading.value = false
-                println("[ViewModel] Carga finalizada, isLoading: ${_isLoading.value}")
+                println("[ViewModel] Carga finalizada, isLoading: false")
             }
         }
     }

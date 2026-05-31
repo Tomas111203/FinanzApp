@@ -32,10 +32,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,6 +55,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import com.google.firebase.auth.FirebaseAuth
@@ -68,42 +74,59 @@ fun PantallaPrincipal(
 ) {
     val transactions by viewModel.transactions.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
+    // Usar un flag para saber si ya cargó datos
+    var hasLoaded by remember { mutableStateOf(false) }
 
+    // RECARGAR DATOS CADA VEZ QUE LA PANTALLA ESTÁ VISIBLE
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                println("[Principal] ON_RESUME - Recargando datos de Firestore...")
+                if (!isLoading) {
+                    viewModel.loadTransactions()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
+    // Carga inicial
+    LaunchedEffect(Unit) {
+        if (!hasLoaded && transactions.isEmpty()) {
+        println("[Principal] Carga inicial de datos...")
+        viewModel.loadTransactions()
+            hasLoaded = true
+        }
+    }
 
-    // Log cuando cambian las transacciones
+    // Logs de depuración
     LaunchedEffect(transactions) {
         println("==========================================")
         println("[Principal] Transacciones en UI: ${transactions.size}")
         transactions.forEach { t ->
-            println("UI - ${t.name}: $${t.amount} (${t.type}) - ${t.category}")
+            println("   UI - ${t.name}: $${t.amount} (${t.type})")
         }
-        // Calcular totales
         val ingresos = transactions.filter { it.type == "income" }.sumOf { it.amount }
         val gastos = transactions.filter { it.type == "expense" }.sumOf { it.amount }
         println("UI - Ingresos: $${ingresos}, Gastos: $${gastos}, Balance: $${ingresos - gastos}")
         println("==========================================")
     }
-
-    // Log cuando cambia el estado de carga
+    // NUEVO LOG - Para ver cuándo cambia isLoading
     LaunchedEffect(isLoading) {
-        println("UI - Estado de carga: ${if (isLoading) "CARGANDO..." else "LISTO"}")
+        println("[Principal] isLoading cambió a: $isLoading")
+    }
+
+// NUEVO LOG - Para ver si hay error
+    LaunchedEffect(errorMessage) {
+        println("[Principal] errorMessage: $errorMessage")
     }
 
     val userName = user?.displayName?.split(" ")?.firstOrNull() ?: "Usuario"
-
-    // Log del usuario
-    LaunchedEffect(Unit) {
-        println("UI - Usuario: $userName")
-        println("UI - Email: ${user?.email ?: "No email"}")
-        println("UI - UID: ${user?.uid ?: "No UID"}")
-    }
-
-    // Cargar transacciones
-    LaunchedEffect(Unit) {
-        println("UI - Inicializando pantalla principal...")
-        viewModel.loadTransactions()
-    }
 
     // Calcular totales
     val totalIncome = transactions
@@ -123,122 +146,170 @@ fun PantallaPrincipal(
 
     val recentTransactions = transactions.take(5)
 
-    LazyColumn(
+    // Usar Box para manejar diferentes estados sin pantalla en blanco
+    Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        // TopBar
-        item {
-            TopBar(userName = userName, navController = navController)
-        }
+        // Contenido principal - SIEMPRE visible
+        LazyColumn(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            // TopBar
+            item {
+                TopBar(userName = userName, navController = navController)
+            }
 
-        // Balance
-        item {
-            Balance(
-                totalBalance = totalBalance,
-                totalIncome = totalIncome,
-                totalExpense = totalExpense,
-                currencyFormatter = currencyFormatter
-            )
-        }
-
-        // Botones de navegación
-        item {
-            Row(
-                horizontalArrangement = Arrangement.SpaceAround,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(15.dp)
-            ) {
-                Botones(
-                    text = "Agregar",
-                    icon = painterResource(R.drawable.mdi),
-                    tint = Color.Green,
-                    onClick = {
-                        println("UI - Click en botón AGREGAR")
-                        navController.navigate("AgregarTransaccion")
-                    }
-                )
-                Botones(
-                    text = "Historial",
-                    icon = painterResource(R.drawable.fluent__history_32_filled),
-                    tint = Color.Blue,
-                    onClick = {
-                        println("UI - Click en botón HISTORIAL")
-                        navController.navigate("Historial")
-                    }
-                )
-                Botones(
-                    text = "Estadisticas",
-                    icon = painterResource(R.drawable.lucide__chart_column),
-                    tint = Color.Magenta,
-                    onClick = {
-                        println("UI - Click en botón ESTADISTICAS")
-                        navController.navigate("Estadisticas")
-                    }
+            // Balance
+            item {
+                Balance(
+                    totalBalance = totalBalance,
+                    totalIncome = totalIncome,
+                    totalExpense = totalExpense,
+                    currencyFormatter = currencyFormatter
                 )
             }
-        }
 
-        // Transacciones recientes
-        item {
-            Surface(
-                modifier = Modifier
-                    .imePadding()
-                    .padding(15.dp)
-                    .fillMaxWidth()
-                    .border(
-                        2.dp,
-                        color = Color(0xFF),
-                        RoundedCornerShape(16.dp)
-                    )
-                    .shadow(8.dp, shape = RoundedCornerShape(20.dp)),
-                color = MaterialTheme.colorScheme.onPrimary,
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(15.dp),
-                    horizontalAlignment = Alignment.Start
+            // Botones de navegación
+            item {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(15.dp)
                 ) {
-                    Text(
-                        "Transacciones Recientes",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+                    Botones(
+                        text = "Agregar",
+                        icon = painterResource(R.drawable.mdi),
+                        tint = Color.Green,
+                        onClick = {
+                            println("UI - Click en botón AGREGAR")
+                            navController.navigate("AgregarTransaccion")
+                        }
                     )
+                    Botones(
+                        text = "Historial",
+                        icon = painterResource(R.drawable.fluent__history_32_filled),
+                        tint = Color.Blue,
+                        onClick = {
+                            println("UI - Click en botón HISTORIAL")
+                            navController.navigate("Historial")
+                        }
+                    )
+                    Botones(
+                        text = "Estadisticas",
+                        icon = painterResource(R.drawable.lucide__chart_column),
+                        tint = Color.Magenta,
+                        onClick = {
+                            println("UI - Click en botón ESTADISTICAS")
+                            navController.navigate("Estadisticas")
+                        }
+                    )
+                }
+            }
 
-                    if (isLoading) {
-                        println("UI - Mostrando indicador de carga...")
-                        CircularProgressIndicator(
-                            modifier = Modifier.padding(vertical = 20.dp)
+            // Transacciones recientes
+            item {
+                Surface(
+                    modifier = Modifier
+                        .imePadding()
+                        .padding(15.dp)
+                        .fillMaxWidth()
+                        .border(
+                            2.dp,
+                            color = Color(0xFF),
+                            RoundedCornerShape(16.dp)
                         )
-                    } else if (recentTransactions.isEmpty()) {
-                        println("UI - No hay transacciones para mostrar")
+                        .shadow(8.dp, shape = RoundedCornerShape(20.dp)),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(15.dp),
+                        horizontalAlignment = Alignment.Start
+                    ) {
                         Text(
-                            "No hay transacciones aún",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray,
-                            modifier = Modifier.padding(vertical = 20.dp)
+                            "Transacciones Recientes",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
                         )
-                    } else {
-                        println("UI - Mostrando ${recentTransactions.size} transacciones recientes")
-                        recentTransactions.forEach { transaction ->
-                            ItemTransaccion(
-                                categoria = transaction.name,
-                                descripcion = transaction.category,
-                                monto = if (transaction.type == "income")
-                                    "+$${currencyFormatter.format(transaction.amount)}"
-                                else
-                                    "-$${currencyFormatter.format(transaction.amount)}",
-                                fecha = dateFormatter.format(transaction.date),
-                                ingreso = transaction.type == "income"
-                            )
+
+                        when {
+                            isLoading && transactions.isEmpty() -> {
+                                println("⏳ [Principal] Mostrando loader - primera carga")
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 20.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator()
+                                }
+                            }
+                            recentTransactions.isEmpty() -> {
+                                println("📭 [Principal] No hay transacciones")
+                                Text(
+                                    "No hay transacciones aún",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.Gray,
+                                    modifier = Modifier.padding(vertical = 20.dp)
+                                )
+                            }
+                            else -> {
+                                println("📋 [Principal] Mostrando ${recentTransactions.size} transacciones")
+                                recentTransactions.forEach { transaction ->
+                                    ItemTransaccion(
+                                        categoria = transaction.name,
+                                        descripcion = transaction.category,
+                                        monto = if (transaction.type == "income")
+                                            "+$${currencyFormatter.format(transaction.amount)}"
+                                        else
+                                            "-$${currencyFormatter.format(transaction.amount)}",
+                                        fecha = dateFormatter.format(transaction.date),
+                                        ingreso = transaction.type == "income"
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+
+        // Indicador de carga OVERLAY (solo cuando está recargando y ya hay datos)
+        if (isLoading && transactions.isNotEmpty()) {
+            println("🔄 [Principal] Recargando datos - mostrando overlay")
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 200.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(40.dp)
+                )
+            }
+        }
+
+        // Mostrar error si hay (sin bloquear la UI)
+        errorMessage?.let { error ->
+            println("❌ [Principal] Error: $error")
+            androidx.compose.material3.Snackbar(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp),
+                action = {
+                    androidx.compose.material3.TextButton(
+                        onClick = { viewModel.loadTransactions() }
+                    ) {
+                        Text("Reintentar")
+                    }
+                }
+            ) {
+                Text(error)
+            }
+        }
     }
 }
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
