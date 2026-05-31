@@ -119,7 +119,7 @@ fun PantallaPrincipal(
                     horizontalArrangement = Arrangement.SpaceAround,
                     modifier = Modifier.fillMaxWidth().padding(15.dp)
                 ) {
-                    Botones("Agregar", painterResource(R.drawable.mdi), Color.Green) {
+                    Botones("Agregar", painterResource(R.drawable.mdi), Color(0xFF00A63E)) {
                         navController.navigate("AgregarTransaccion")
                     }
                     Botones("Historial", painterResource(R.drawable.fluent__history_32_filled), Color.Blue) {

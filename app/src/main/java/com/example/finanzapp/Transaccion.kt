@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -49,8 +50,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -168,22 +171,31 @@ fun AgregarTransaccionScreen(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 FilterChip(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(60.dp),
                     selected = selectedType == "expense",
                     onClick = {
                         println("[Transaccion] Seleccionado: GASTO")
                         selectedType = "expense"
                     },
                     label = {
-                        Text(
-                            "Gasto",
-                            color = if (selectedType == "expense") Color.White else Color(0xFFDC2626),
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 16.sp
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Gasto",
+                                color = if (selectedType == "expense") Color.White else Color(
+                                    0xFFDC2626
+                                ),
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 16.sp
+                            )
+                        }
                     },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = Color(0xFFDC2626),
@@ -194,19 +206,28 @@ fun AgregarTransaccionScreen(
                 )
 
                 FilterChip(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(60.dp),
                     selected = selectedType == "income",
                     onClick = {
                         println("[Transaccion] Seleccionado: INGRESO")
                         selectedType = "income"
                     },
                     label = {
-                        Text(
-                            "Ingreso",
-                            color = if (selectedType == "income") Color.White else Color(0xFF16A34A),
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 16.sp
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Ingreso",
+                                color = if (selectedType == "income") Color.White else Color(
+                                    0xFF16A34A
+                                ),
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 16.sp
+                            )
+                        }
                     },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = Color(0xFF16A34A),
@@ -260,16 +281,53 @@ fun AgregarTransaccionScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+
+
                 paymentMethods.forEach { method ->
                     FilterChip(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(80.dp),  // ← Altura fija, el contenido se adaptará
                         selected = selectedPaymentMethod == method,
                         onClick = {
                             println("[Transaccion] Método de pago seleccionado: $method")
                             selectedPaymentMethod = method
                         },
                         label = {
-                            Text(method, fontSize = 12.sp)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize(),  // ← Ocupa todo el espacio del FilterChip
+                                contentAlignment = Alignment.Center  // ← Centra TODO el contenido (icono + texto)
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier.wrapContentSize()  // ← El contenido ocupa solo lo necesario
+                                ) {
+                                    // Icono (arriba)
+                                    Icon(
+                                        painter = painterResource(
+                                            when (method) {
+                                                "Efectivo" -> R.drawable.lucide__banknote
+                                                "Tarjeta de Débito" -> R.drawable.lucide__credit_card
+                                                else -> R.drawable.lucide__credit_card
+                                            }
+                                        ),
+                                        contentDescription = method,
+                                        modifier = Modifier.size(24.dp),
+                                        tint = if (selectedPaymentMethod == method) Color.White else Color(0xFF3B82F6)
+                                    )
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    // Texto (debajo)
+                                    Text(
+                                        method,
+                                        fontSize = 12.sp,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
                         },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = Color(0xFF3B82F6),

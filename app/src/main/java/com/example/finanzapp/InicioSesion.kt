@@ -187,6 +187,7 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 val isEmailValid=email.matches(Regex("^(?=.*[A-Za-z])(?=.*[@])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\$"))
+                val showEmailError = email.isNotBlank() && !isEmailValid
                 TextField(
                     value = email,
                     onValueChange = {email=it},
@@ -194,7 +195,7 @@ fun LoginScreen(
                     label ={Text("Correo Electrónico")},
                     placeholder = {Text("finanzapp@email.com")},
                     modifier=modifierComponents,
-                    isError = !isEmailValid
+                    isError = showEmailError
 
                 )
                 Spacer(modifier=Modifier.width(10.dp))

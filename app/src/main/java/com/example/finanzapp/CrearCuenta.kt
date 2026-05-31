@@ -2,12 +2,10 @@
 package com.example.finanzapp
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,15 +15,18 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,7 +43,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.colorResource
@@ -52,9 +52,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
@@ -67,8 +67,7 @@ import com.google.firebase.auth.UserProfileChangeRequest
 fun CrearCuenta(
     auth: FirebaseAuth,
     navController: NavController,
-    modifier: Modifier=Modifier,
-    onClick:()-> Unit={}
+    modifier: Modifier=Modifier
 ){
     var email by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
@@ -76,6 +75,14 @@ fun CrearCuenta(
     var passwordVisible by remember { mutableStateOf(false) }
     var pass2 by remember { mutableStateOf("") }
     var passwordVisible2 by remember { mutableStateOf(false) }
+
+    val tieneLongitud = pass.length >= 8
+    val tieneMayuscula = pass.any { it.isUpperCase() }
+    val tieneMinuscula = pass.any { it.isLowerCase() }
+    val tieneNumero = pass.any { it.isDigit() }
+    val tieneSimbolo = pass.any { it in "!@#\$%^&*()_+-=[]{}|;:,.<>?/\\~" }
+
+
 
     var showDialog by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
@@ -111,7 +118,7 @@ fun CrearCuenta(
             ),
         ) {
             Icon(
-                imageVector = Icons.Default.ArrowBack,
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Regresar"
             )
             Spacer(modifier = Modifier.width(8.dp))
@@ -140,6 +147,7 @@ fun CrearCuenta(
                 Spacer(modifier = Modifier.height(5.dp))
 
                 val isNameValid= name.matches(Regex("^([A-Za-zÁÉÍÓÚáéíóú]+ ?){4,}$"))
+                val showNameError = name.isNotBlank() && !isNameValid
                 TextField(
                     value = name,
                     onValueChange = {name=it},
@@ -148,10 +156,12 @@ fun CrearCuenta(
                     placeholder = {Text("Juán Perez")},
                     modifier=modifierComponents,
                     visualTransformation = VisualTransformation.None,
-                    isError = !isNameValid
+                    isError = showNameError
                 )
 
                 val isEmailValid=email.matches(Regex("^(?=.*[A-Za-z])(?=.*[@])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\$"))
+                val showEmailError = email.isNotBlank() && !isEmailValid
+
                 TextField(
                     value = email,
                     onValueChange = {email=it},
@@ -159,38 +169,78 @@ fun CrearCuenta(
                     label ={Text("Correo Electrónico")},
                     placeholder = {Text("finanzapp@email.com")},
                     modifier=modifierComponents,
-                    isError= !isEmailValid
+                    isError= showEmailError
                 )
                 val isPasswordValid= pass.matches(Regex("^(?=.*[A-Z])(?=.*[a-z])(?=.*\\d)(?=.*[@=!\\$%&]).{8,}$"))
-                TextField(
-                    value = pass,
-                    onValueChange = {pass=it},
-                    colors = colorComponents,
-                    label ={Text("Contraseña")},
-                    placeholder = {Text("******")},
-                    modifier=modifierComponents,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Password
-                    ),
-                    visualTransformation = if(passwordVisible)
-                        VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon={
-                        val id= if(passwordVisible)
-                            R.drawable.baseline_visibility_24 else R.drawable.baseline_visibility_off_24
 
-                        IconButton(
-                            onClick = {passwordVisible = !passwordVisible},
-                            modifier= Modifier.size(24.dp)
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    TextField(
+                        value = pass,
+                        onValueChange = { pass = it },
+                        colors = colorComponents,
+                        label = { Text("Contraseña") },
+                        placeholder = { Text("******") },
+                        modifier = modifierComponents,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            val id = if (passwordVisible) R.drawable.baseline_visibility_24 else R.drawable.baseline_visibility_off_24
+                            IconButton(
+                                onClick = { passwordVisible = !passwordVisible },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(painter = painterResource(id), contentDescription = if (passwordVisible) "Hide password" else "Show password")
+                            }
+                        },
+                        isError = pass.isNotEmpty() && !isPasswordValid
+                    )
+
+
+                    if (pass.isNotEmpty() && !isPasswordValid) {
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F3F5)),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
-                            Icon(
-                                painter=painterResource(id),
-                                contentDescription= if(passwordVisible)
-                                    "Hide password" else "Show password"
-                            )
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "La contraseña debe contener:",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+
+                                RequisitoTexto(
+                                    cumple = tieneLongitud,
+                                    texto = "• Mínimo 8 caracteres"
+                                )
+                                RequisitoTexto(
+                                    cumple = tieneMayuscula,
+                                    texto = "• Al menos una mayúscula"
+                                )
+                                RequisitoTexto(
+                                    cumple = tieneMinuscula,
+                                    texto = "• Al menos una minúscula"
+                                )
+                                RequisitoTexto(
+                                    cumple = tieneNumero,
+                                    texto = "• Al menos un número"
+                                )
+                                RequisitoTexto(
+                                    cumple = tieneSimbolo,
+                                    texto = "• Al menos un símbolo especial (!@#\$%^&*)"
+                                )
+                            }
                         }
-                    },
-                    isError = !isPasswordValid
-                )
+                    }
+                }
+
                 val isConfirmPasswordValid= pass==pass2
                 TextField(
                     value = pass2,
@@ -311,6 +361,27 @@ fun CrearCuenta(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun RequisitoTexto(cumple: Boolean, texto: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(
+            imageVector = if (cumple) Icons.Default.CheckCircle else Icons.Default.Cancel,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = if (cumple) Color(0xFF4CAF50) else Color(0xFFF44336)
+        )
+        Text(
+            text = texto,
+            fontSize = 12.sp,
+            color = if (cumple) Color(0xFF4CAF50) else Color.Gray,
+            textDecoration = if (cumple) TextDecoration.LineThrough else null
+        )
     }
 }
 
