@@ -146,7 +146,207 @@ fun AgregarTransaccionScreen(
                     CircularProgressIndicator()
                 }
             }
+            // 1. TIPO DE TRANSACCIÓN
+            Text(
+                text = "Tipo de transacción",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.Gray
+            )
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                FilterChip(
+                    modifier = Modifier.weight(1f),
+                    selected = selectedType == "expense",
+                    onClick = { selectedType = "expense" },
+                    label = {
+                        Text(
+                            "Gasto",
+                            color = if (selectedType == "expense") Color.White else Color(0xFFDC2626),
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 16.sp
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFFDC2626),
+                        selectedLabelColor = Color.White,
+                        disabledContainerColor = Color(0xFFFEE2E2),
+                        disabledLabelColor = Color(0xFFDC2626)
+                    )
+                )
+
+                FilterChip(
+                    modifier = Modifier.weight(1f),
+                    selected = selectedType == "income",
+                    onClick = { selectedType = "income" },
+                    label = {
+                        Text(
+                            "Ingreso",
+                            color = if (selectedType == "income") Color.White else Color(0xFF16A34A),
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 16.sp
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF16A34A),
+                        selectedLabelColor = Color.White,
+                        disabledContainerColor = Color(0xFFDCFCE7),
+                        disabledLabelColor = Color(0xFF16A34A)
+                    )
+                )
+            }
+
+            // 2. MONTO
+            Text(
+                text = "Monto",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.Gray
+            )
+
+            OutlinedTextField(
+                value = amount,
+                onValueChange = { amount = it },
+                placeholder = { Text("0.00") },
+                leadingIcon = { Text("$", fontSize = 20.sp, fontWeight = FontWeight.Bold) },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                isError = amount.isNotEmpty() && amount.toDoubleOrNull() == null
+            )
+
+            if (amount.isNotEmpty() && amount.toDoubleOrNull() == null) {
+                Text(
+                    text = "Ingresa un monto válido",
+                    fontSize = 11.sp,
+                    color = Color(0xFFDC2626)
+                )
+            }
+
+            // 3. MÉTODO DE PAGO
+            Text(
+                text = "Método de pago",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.Gray
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                paymentMethods.forEach { method ->
+                    FilterChip(
+                        modifier = Modifier.weight(1f),
+                        selected = selectedPaymentMethod == method,
+                        onClick = { selectedPaymentMethod = method },
+                        label = {
+                            Text(method, fontSize = 12.sp)
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF3B82F6),
+                            selectedLabelColor = Color.White,
+                            disabledContainerColor = Color(0xFFEFF6FF),
+                            disabledLabelColor = Color(0xFF3B82F6)
+                        )
+                    )
+                }
+            }
+
+            if (selectedPaymentMethod.isEmpty()) {
+                Text(
+                    text = "* Selecciona un método de pago",
+                    fontSize = 11.sp,
+                    color = Color(0xFFDC2626)
+                )
+            }
+
+            // 4. CATEGORÍA
+            Text(
+                text = "Categoría",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.Gray
+            )
+
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .clickable { showCategoryDropdown = true }
+                        .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color.White
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (selectedCategory.isEmpty()) "Selecciona una categoría" else selectedCategory,
+                            color = if (selectedCategory.isEmpty()) Color.Gray else Color.Black,
+                            fontSize = 14.sp
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = "Desplegar",
+                            tint = Color.Gray
+                        )
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = showCategoryDropdown,
+                    onDismissRequest = { showCategoryDropdown = false },
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                ) {
+                    categories.forEach { category ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(category, fontSize = 14.sp)
+                            },
+                            onClick = {
+                                selectedCategory = category
+                                showCategoryDropdown = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            if (selectedCategory.isEmpty()) {
+                Text(
+                    text = "* Selecciona una categoría",
+                    fontSize = 11.sp,
+                    color = Color(0xFFDC2626)
+                )
+            }
+
+            // 5. DESCRIPCIÓN
+            Text(
+                text = "Descripción (opcional)",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.Gray
+            )
+
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                placeholder = { Text("Ej: Compra del supermercado") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                maxLines = 3,
+                minLines = 2
+            )
 
 
             Button(
