@@ -22,6 +22,7 @@ import com.google.firebase.auth.auth
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.google.firebase.auth.FirebaseUser
+import com.example.finanzapp.PantallaPrincipal
 
 class MainActivity : ComponentActivity() {
 
@@ -109,14 +110,6 @@ fun App(auth: FirebaseAuth) {
     }
 }
 
-@Composable
-fun PantallaPrincipal(
-    viewModel: TransactionViewModel,
-    navController: NavHostController,
-    user: FirebaseUser?
-) {
-    TODO("Not yet implemented")
-}
 
 @Composable
 fun LoginApp(

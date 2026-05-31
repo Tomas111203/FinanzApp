@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import androidx.navigation.NavHostController
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -63,6 +64,149 @@ import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+@Composable
+fun PantallaPrincipal(
+    viewModel: TransactionViewModel,
+    navController: NavHostController,
+    user: FirebaseUser?
+) {
+    val transactions by viewModel.transactions.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+
+    val userName = user?.displayName?.split(" ")?.firstOrNull() ?: "Usuario"
+
+    // Cargar transacciones
+    LaunchedEffect(Unit) {
+        viewModel.loadTransactions()
+    }
+
+    // Calcular totales
+    val totalIncome = transactions
+        .filter { it.type == "income" }
+        .sumOf { it.amount }
+    val totalExpense = transactions
+        .filter { it.type == "expense" }
+        .sumOf { it.amount }
+    val totalBalance = totalIncome - totalExpense
+
+    val currencyFormatter = remember {
+        NumberFormat.getNumberInstance(Locale("es", "MX"))
+    }
+    val dateFormatter = remember {
+        SimpleDateFormat("dd MMM", Locale("es", "MX"))
+    }
+
+    val recentTransactions = transactions.take(5)
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // TopBar
+        item {
+            TopBar(userName = userName, navController = navController)
+        }
+
+        // Balance
+        item {
+            Balance(
+                totalBalance = totalBalance,
+                totalIncome = totalIncome,
+                totalExpense = totalExpense,
+                currencyFormatter = currencyFormatter
+            )
+        }
+
+        // Botones de navegación
+        item {
+            Row(
+                horizontalArrangement = Arrangement.SpaceAround,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(15.dp)
+            ) {
+                Botones(
+                    text = "Agregar",
+                    icon = painterResource(R.drawable.mdi),
+                    tint = Color.Green,
+                    onClick = {
+                        navController.navigate("AgregarTransaccion")
+                    }
+                )
+                Botones(
+                    text = "Historial",
+                    icon = painterResource(R.drawable.fluent__history_32_filled),
+                    tint = Color.Blue,
+                    onClick = {
+                        navController.navigate("Historial")
+                    }
+                )
+                Botones(
+                    text = "Estadisticas",
+                    icon = painterResource(R.drawable.lucide__chart_column),
+                    tint = Color.Magenta,
+                    onClick = {
+                        navController.navigate("Estadisticas")
+                    }
+                )
+            }
+        }
+
+        // Transacciones recientes
+        item {
+            Surface(
+                modifier = Modifier
+                    .imePadding()
+                    .padding(15.dp)
+                    .fillMaxWidth()
+                    .border(
+                        2.dp,
+                        color = Color(0xFF),
+                        RoundedCornerShape(16.dp)
+                    )
+                    .shadow(8.dp, shape = RoundedCornerShape(20.dp)),
+                color = MaterialTheme.colorScheme.onPrimary,
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(15.dp),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Text(
+                        "Transacciones Recientes",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.padding(vertical = 20.dp)
+                        )
+                    } else if (recentTransactions.isEmpty()) {
+                        Text(
+                            "No hay transacciones aún",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(vertical = 20.dp)
+                        )
+                    } else {
+                        recentTransactions.forEach { transaction ->
+                            ItemTransaccion(
+                                categoria = transaction.name,
+                                descripcion = transaction.category,
+                                monto = if (transaction.type == "income")
+                                    "+$${currencyFormatter.format(transaction.amount)}"
+                                else
+                                    "-$${currencyFormatter.format(transaction.amount)}",
+                                fecha = dateFormatter.format(transaction.date),
+                                ingreso = transaction.type == "income"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun TopBar(userName: String, navController: NavController) {
