@@ -130,7 +130,7 @@ fun PantallaPrincipal(
                     icon = painterResource(R.drawable.mdi),
                     tint = Color.Green,
                     onClick = {
-                        navController.navigate("Transaccion")
+                        navController.navigate("AgregarTransaccion")
                     }
                 )
                 Botones(
