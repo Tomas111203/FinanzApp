@@ -54,6 +54,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -63,6 +64,7 @@ import java.util.UUID
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AgregarTransaccionScreen(
+    viewModel: TransactionViewModel = viewModel(),
     onBackClick: () -> Unit = {},
     onSaveClick: () -> Unit = {}
 ) {
@@ -79,7 +81,7 @@ fun AgregarTransaccionScreen(
     var successMessage by remember { mutableStateOf<String?>(null) }  // ← Agrega esto
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val transactionRepository = remember { TransactionRepository() }
+
 
 // Mostrar mensajes (ERROR o ÉXITO)
     LaunchedEffect(errorMessage, successMessage) {  // ← Escucha ambos
@@ -361,25 +363,24 @@ fun AgregarTransaccionScreen(
                     if (validateForm(amount, selectedPaymentMethod, selectedCategory)) {
                         isLoading = true
                         scope.launch {
-                            saveTransaction(
-                                repository = transactionRepository,
+                            // Usar viewModel.saveTransaction en lugar de saveTransaction
+                            val result = viewModel.saveTransaction(
                                 type = selectedType,
                                 amount = amount.toDouble(),
                                 paymentMethod = selectedPaymentMethod,
                                 category = selectedCategory,
-                                description = description,
-                                onSuccess = {
-                                    isLoading = false
-                                    successMessage = "Transacción guardada exitosamente"  // ← NUEVO
-                                },
-                                onError = { errMsg ->
-                                    isLoading = false
-                                    errorMessage = errMsg
-                                }
+                                description = description
                             )
-                            // Esperar 1 segundo para mostrar el mensaje y regresar
-                            delay(1000)
-                            onSaveClick()
+
+                            isLoading = false
+
+                            if (result.isSuccess) {
+                                successMessage = "✅ Transacción guardada exitosamente"
+                                delay(1500)
+                                onSaveClick()
+                            } else {
+                                errorMessage = result.exceptionOrNull()?.message ?: "Error al guardar"
+                            }
                         }
                     } else {
                         scope.launch {
