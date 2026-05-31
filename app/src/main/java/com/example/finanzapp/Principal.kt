@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +54,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
@@ -61,152 +64,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 @Composable
-fun PantallaPrincipal(
-    navController: NavController,
-    user: FirebaseUser?,
-    onClick: () -> Unit = {}
-) {
-    val repository = remember { TransactionRepository() }
-    var transactions by remember { mutableStateOf<List<FirestoreTransaction>>(emptyList()) }
-    val userName = user?.displayName?.split(" ")?.firstOrNull() ?: "Usuario"
-
-    // Cargar transacciones reales desde Firestore
-    LaunchedEffect(Unit) {
-        try {
-            transactions = repository.getAllTransactions()
-        } catch (e: Exception) {
-            // Si hay error, se muestra lista vacía
-            transactions = emptyList()
-        }
-    }
-
-    // Calcular totales reales
-    val totalIncome = transactions
-        .filter { it.type == "income" }
-        .sumOf { it.amount }
-    val totalExpense = transactions
-        .filter { it.type == "expense" }
-        .sumOf { it.amount }
-    val totalBalance = totalIncome - totalExpense
-
-    val currencyFormatter = remember {
-        NumberFormat.getNumberInstance(Locale("es", "MX"))
-    }
-    val dateFormatter = remember {
-        SimpleDateFormat("dd MMM", Locale("es", "MX"))
-    }
-
-    // Obtener solo las últimas 5 transacciones para mostrar
-    val recentTransactions = transactions.take(5)
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // TopBar
-        item {
-            TopBar(userName = userName, navController = navController)
-        }
-
-        // Balance
-        item {
-            Balance(
-                totalBalance = totalBalance,
-                totalIncome = totalIncome,
-                totalExpense = totalExpense,
-                currencyFormatter = currencyFormatter
-            )
-        }
-
-        // Botones de navegación
-        item {
-            Row(
-                horizontalArrangement = Arrangement.SpaceAround,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(15.dp)
-            ) {
-                Botones(
-                    text = "Agregar",
-                    icon = painterResource(R.drawable.mdi),
-                    tint = Color.Green,
-                    onClick = {
-                        navController.navigate("AgregarTransaccion")
-                    }
-                )
-                Botones(
-                    text = "Historial",
-                    icon = painterResource(R.drawable.fluent__history_32_filled),
-                    tint = Color.Blue,
-                    onClick = {
-                        navController.navigate("Historial")
-                    }
-                )
-                Botones(
-                    text = "Estadisticas",
-                    icon = painterResource(R.drawable.lucide__chart_column),
-                    tint = Color.Magenta,
-                    onClick = {
-                        navController.navigate("Estadisticas")
-                    }
-                )
-            }
-        }
-
-        // Transacciones recientes
-        item {
-            Surface(
-                modifier = Modifier
-                    .imePadding()
-                    .padding(15.dp)
-                    .fillMaxWidth()
-                    .border(
-                        2.dp,
-                        color = Color(0xFF),
-                        RoundedCornerShape(16.dp)
-                    )
-                    .shadow(8.dp, shape = RoundedCornerShape(20.dp)),
-                color = MaterialTheme.colorScheme.onPrimary,
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(15.dp),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    Text(
-                        "Transacciones Recientes",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    if (recentTransactions.isEmpty()) {
-                        Text(
-                            "No hay transacciones aún",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray,
-                            modifier = Modifier.padding(vertical = 20.dp)
-                        )
-                    } else {
-                        recentTransactions.forEach { transaction ->
-                            ItemTransaccion(
-                                categoria = transaction.name,
-                                descripcion = transaction.category,
-                                monto = if (transaction.type == "income")
-                                    "+$${currencyFormatter.format(transaction.amount)}"
-                                else
-                                    "-$${currencyFormatter.format(transaction.amount)}",
-                                fecha = dateFormatter.format(transaction.date),
-                                ingreso = transaction.type == "income"
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable
 fun TopBar(userName: String, navController: NavController) {
     TopAppBar(
         modifier = Modifier

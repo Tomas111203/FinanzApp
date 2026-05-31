@@ -67,4 +67,5 @@ dependencies {
     implementation(libs.play.services.auth)
     implementation("com.google.firebase:firebase-firestore")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
 }
