@@ -54,6 +54,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Date
 import java.util.UUID
@@ -71,18 +73,23 @@ fun AgregarTransaccionScreen(
     var description by remember { mutableStateOf("") }
     var showCategoryDropdown by remember { mutableStateOf(false) }
 
+    // Estados
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var successMessage by remember { mutableStateOf<String?>(null) }  // ← Agrega esto
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-
     val transactionRepository = remember { TransactionRepository() }
 
-    // Mostrar Snackbar cuando hay error
-    LaunchedEffect(errorMessage) {
+// Mostrar mensajes (ERROR o ÉXITO)
+    LaunchedEffect(errorMessage, successMessage) {  // ← Escucha ambos
         errorMessage?.let {
             snackbarHostState.showSnackbar(it)
             errorMessage = null
+        }
+        successMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            successMessage = null
         }
     }
 
@@ -363,13 +370,16 @@ fun AgregarTransaccionScreen(
                                 description = description,
                                 onSuccess = {
                                     isLoading = false
-                                    onSaveClick()
+                                    successMessage = "Transacción guardada exitosamente"  // ← NUEVO
                                 },
                                 onError = { errMsg ->
                                     isLoading = false
-                                    errorMessage = errMsg // ← Aquí asignamos el error
+                                    errorMessage = errMsg
                                 }
                             )
+                            // Esperar 1 segundo para mostrar el mensaje y regresar
+                            delay(1000)
+                            onSaveClick()
                         }
                     } else {
                         scope.launch {
@@ -433,28 +443,43 @@ private suspend fun saveTransaction(
     onError: (String) -> Unit
 ) {
     try {
+        // VERIFICAR AUTENTICACIÓN PRIMERO
+        val auth = FirebaseAuth.getInstance()
+        val currentUser = auth.currentUser
+
+        if (currentUser == null) {
+            onError("No hay usuario autenticado. Debes iniciar sesión.")
+            return
+        }
+
+        println("Usuario autenticado: ${currentUser.email} (UID: ${currentUser.uid})")
+
         // Crear objeto FirestoreTransaction
         val transaction = FirestoreTransaction(
-            id = UUID.randomUUID().toString(), // Generar ID único
-            name = if (type == "income") "Ingreso" else "Gasto", // Puedes personalizar esto
+            id = UUID.randomUUID().toString(),
+            name = if (type == "income") "Ingreso" else "Gasto",
             amount = amount,
             category = category,
-            date = Date(), // Fecha actual
+            date = Date(),
             type = type,
             description = description,
             paymentMethod = paymentMethod,
-            userId = "" // Se asignará automáticamente en el repositorio
+            userId = currentUser.uid  // ← Usar el UID real
         )
 
         // Guardar en Firestore
         val result = repository.addTransaction(transaction)
 
         if (result.isSuccess) {
+            println("Transacción guardada exitosamente")
             onSuccess()
         } else {
-            onError(result.exceptionOrNull()?.message ?: "Error al guardar la transacción")
+            val error = result.exceptionOrNull()
+            println("Error al guardar: ${error?.message}")
+            onError(error?.message ?: "Error al guardar la transacción")
         }
     } catch (e: Exception) {
+        println("Excepción: ${e.message}")
         onError(e.message ?: "Error inesperado al guardar")
     }
 }
