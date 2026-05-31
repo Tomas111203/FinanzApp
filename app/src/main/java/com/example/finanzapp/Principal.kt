@@ -19,8 +19,6 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,13 +30,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,9 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import com.google.firebase.auth.FirebaseAuth
@@ -75,85 +68,36 @@ fun PantallaPrincipal(
     val transactions by viewModel.transactions.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
-    // Usar un flag para saber si ya cargó datos
-    var hasLoaded by remember { mutableStateOf(false) }
-
-    // RECARGAR DATOS CADA VEZ QUE LA PANTALLA ESTÁ VISIBLE
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                println("[Principal] ON_RESUME - Recargando datos de Firestore...")
-                if (!isLoading) {
-                    viewModel.loadTransactions()
-                }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
 
     // Carga inicial
     LaunchedEffect(Unit) {
-        if (!hasLoaded && transactions.isEmpty()) {
-        println("[Principal] Carga inicial de datos...")
+        println("[Principal] Carga inicial...")
+        if (transactions.isEmpty() && !isLoading) {
+            viewModel.loadTransactions()
+        }
+    }
+
+    //  Recargar cada vez que la pantalla se reanuda
+    LifecycleResumeEffect(Unit) {
+        println("[Principal] ON_RESUME - Recargando...")
         viewModel.loadTransactions()
-            hasLoaded = true
-        }
-    }
-
-    // Logs de depuración
-    LaunchedEffect(transactions) {
-        println("==========================================")
-        println("[Principal] Transacciones en UI: ${transactions.size}")
-        transactions.forEach { t ->
-            println("   UI - ${t.name}: $${t.amount} (${t.type})")
-        }
-        val ingresos = transactions.filter { it.type == "income" }.sumOf { it.amount }
-        val gastos = transactions.filter { it.type == "expense" }.sumOf { it.amount }
-        println("UI - Ingresos: $${ingresos}, Gastos: $${gastos}, Balance: $${ingresos - gastos}")
-        println("==========================================")
-    }
-    // NUEVO LOG - Para ver cuándo cambia isLoading
-    LaunchedEffect(isLoading) {
-        println("[Principal] isLoading cambió a: $isLoading")
-    }
-
-// NUEVO LOG - Para ver si hay error
-    LaunchedEffect(errorMessage) {
-        println("[Principal] errorMessage: $errorMessage")
+        onPauseOrDispose { }
     }
 
     val userName = user?.displayName?.split(" ")?.firstOrNull() ?: "Usuario"
 
     // Calcular totales
-    val totalIncome = transactions
-        .filter { it.type == "income" }
-        .sumOf { it.amount }
-    val totalExpense = transactions
-        .filter { it.type == "expense" }
-        .sumOf { it.amount }
+    val totalIncome = transactions.filter { it.type == "income" }.sumOf { it.amount }
+    val totalExpense = transactions.filter { it.type == "expense" }.sumOf { it.amount }
     val totalBalance = totalIncome - totalExpense
 
-    val currencyFormatter = remember {
-        NumberFormat.getNumberInstance(Locale("es", "MX"))
-    }
-    val dateFormatter = remember {
-        SimpleDateFormat("dd MMM", Locale("es", "MX"))
-    }
+    val currencyFormatter = remember { NumberFormat.getNumberInstance(Locale("es", "MX")) }
+    val dateFormatter = remember { SimpleDateFormat("dd MMM", Locale("es", "MX")) }
 
     val recentTransactions = transactions.take(5)
 
-    // Usar Box para manejar diferentes estados sin pantalla en blanco
-    Box(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Contenido principal - SIEMPRE visible
-        LazyColumn(
-            modifier = Modifier.fillMaxSize()
-        ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
             // TopBar
             item {
                 TopBar(userName = userName, navController = navController)
@@ -169,41 +113,21 @@ fun PantallaPrincipal(
                 )
             }
 
-            // Botones de navegación
+            // Botones
             item {
                 Row(
                     horizontalArrangement = Arrangement.SpaceAround,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(15.dp)
+                    modifier = Modifier.fillMaxWidth().padding(15.dp)
                 ) {
-                    Botones(
-                        text = "Agregar",
-                        icon = painterResource(R.drawable.mdi),
-                        tint = Color.Green,
-                        onClick = {
-                            println("UI - Click en botón AGREGAR")
-                            navController.navigate("AgregarTransaccion")
-                        }
-                    )
-                    Botones(
-                        text = "Historial",
-                        icon = painterResource(R.drawable.fluent__history_32_filled),
-                        tint = Color.Blue,
-                        onClick = {
-                            println("UI - Click en botón HISTORIAL")
-                            navController.navigate("Historial")
-                        }
-                    )
-                    Botones(
-                        text = "Estadisticas",
-                        icon = painterResource(R.drawable.lucide__chart_column),
-                        tint = Color.Magenta,
-                        onClick = {
-                            println("UI - Click en botón ESTADISTICAS")
-                            navController.navigate("Estadisticas")
-                        }
-                    )
+                    Botones("Agregar", painterResource(R.drawable.mdi), Color.Green) {
+                        navController.navigate("AgregarTransaccion")
+                    }
+                    Botones("Historial", painterResource(R.drawable.fluent__history_32_filled), Color.Blue) {
+                        navController.navigate("Historial")
+                    }
+                    Botones("Estadisticas", painterResource(R.drawable.lucide__chart_column), Color.Magenta) {
+                        navController.navigate("Estadisticas")
+                    }
                 }
             }
 
@@ -214,19 +138,12 @@ fun PantallaPrincipal(
                         .imePadding()
                         .padding(15.dp)
                         .fillMaxWidth()
-                        .border(
-                            2.dp,
-                            color = Color(0xFF),
-                            RoundedCornerShape(16.dp)
-                        )
+                        .border(2.dp, Color(0xFF), RoundedCornerShape(16.dp))
                         .shadow(8.dp, shape = RoundedCornerShape(20.dp)),
                     color = MaterialTheme.colorScheme.onPrimary,
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(15.dp),
-                        horizontalAlignment = Alignment.Start
-                    ) {
+                    Column(modifier = Modifier.padding(15.dp)) {
                         Text(
                             "Transacciones Recientes",
                             style = MaterialTheme.typography.titleLarge,
@@ -234,28 +151,8 @@ fun PantallaPrincipal(
                         )
 
                         when {
-                            isLoading && transactions.isEmpty() -> {
-                                println("⏳ [Principal] Mostrando loader - primera carga")
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 20.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator()
-                                }
-                            }
-                            recentTransactions.isEmpty() -> {
-                                println("📭 [Principal] No hay transacciones")
-                                Text(
-                                    "No hay transacciones aún",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.Gray,
-                                    modifier = Modifier.padding(vertical = 20.dp)
-                                )
-                            }
-                            else -> {
-                                println("📋 [Principal] Mostrando ${recentTransactions.size} transacciones")
+                            // Mostrar transacciones si hay
+                            recentTransactions.isNotEmpty() -> {
                                 recentTransactions.forEach { transaction ->
                                     ItemTransaccion(
                                         categoria = transaction.name,
@@ -269,38 +166,46 @@ fun PantallaPrincipal(
                                     )
                                 }
                             }
+                            // Mostrar loader solo en primera carga sin datos
+                            isLoading && transactions.isEmpty() -> {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(20.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator()
+                                }
+                            }
+                            // Mostrar mensaje si no hay transacciones
+                            else -> {
+                                Text(
+                                    "No hay transacciones aún",
+                                    modifier = Modifier.padding(vertical = 20.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Indicador de carga OVERLAY (solo cuando está recargando y ya hay datos)
+        // Indicador de carga overlay (solo cuando recarga pero ya hay datos)
         if (isLoading && transactions.isNotEmpty()) {
-            println("🔄 [Principal] Recargando datos - mostrando overlay")
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(top = 200.dp),
                 contentAlignment = Alignment.TopCenter
             ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(40.dp)
-                )
+                CircularProgressIndicator(modifier = Modifier.size(40.dp))
             }
         }
 
-        // Mostrar error si hay (sin bloquear la UI)
+        // Error message
         errorMessage?.let { error ->
-            println("❌ [Principal] Error: $error")
             androidx.compose.material3.Snackbar(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(16.dp),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
                 action = {
-                    androidx.compose.material3.TextButton(
-                        onClick = { viewModel.loadTransactions() }
-                    ) {
+                    androidx.compose.material3.TextButton(onClick = { viewModel.loadTransactions() }) {
                         Text("Reintentar")
                     }
                 }
@@ -318,23 +223,13 @@ fun TopBar(userName: String, navController: NavController) {
         modifier = Modifier
             .height(100.dp)
             .fillMaxWidth()
-            .border(
-                2.dp,
-                color = Color(0xFFE0E0E0),
-                shape = RectangleShape
-            )
-            .shadow(
-                8.dp,
-                shape = RectangleShape,
-                clip = false
-            ),
+            .border(2.dp, Color(0xFFE0E0E0), shape = RectangleShape)
+            .shadow(8.dp, shape = RectangleShape, clip = false),
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
@@ -353,15 +248,10 @@ fun TopBar(userName: String, navController: NavController) {
                     Spacer(Modifier.width(9.dp))
                     Column {
                         Text("FinanzApp", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            "Bienvenido $userName",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = Color.Gray
-                        )
+                        Text("Bienvenido $userName", style = MaterialTheme.typography.titleSmall, color = Color.Gray)
                     }
                 }
                 IconButton(onClick = {
-                    println("UI - Click en botón LOGOUT")
                     FirebaseAuth.getInstance().signOut()
                     navController.navigate("Login") {
                         popUpTo("Principal") { inclusive = true }
@@ -389,11 +279,7 @@ fun Balance(
             .fillMaxWidth()
             .padding(15.dp)
             .height(180.dp)
-            .border(
-                2.dp,
-                colorResource(R.color.ic_launcher_background),
-                RoundedCornerShape(16.dp)
-            ),
+            .border(2.dp, colorResource(R.color.ic_launcher_background), RoundedCornerShape(16.dp)),
         color = Color.Transparent,
         shape = RoundedCornerShape(16.dp),
     ) {
@@ -412,16 +298,10 @@ fun Balance(
                 )
         ) {
             Column(
-                modifier = Modifier
-                    .padding(15.dp)
-                    .fillMaxSize(),
+                modifier = Modifier.padding(15.dp).fillMaxSize(),
                 verticalArrangement = Arrangement.SpaceAround
             ) {
-                Text(
-                    "Balance Total",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = Color.White
-                )
+                Text("Balance Total", style = MaterialTheme.typography.titleSmall, color = Color.White)
                 Text(
                     "$${currencyFormatter.format(totalBalance)}",
                     style = MaterialTheme.typography.titleLarge,
@@ -441,11 +321,7 @@ fun Balance(
                                 modifier = Modifier.size(20.dp),
                                 tint = Color.White
                             )
-                            Text(
-                                "Ingresos",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = Color.White
-                            )
+                            Text("Ingresos", style = MaterialTheme.typography.titleSmall, color = Color.White)
                         }
                         Text(
                             "$${currencyFormatter.format(totalIncome)}",
@@ -463,11 +339,7 @@ fun Balance(
                                 modifier = Modifier.size(20.dp),
                                 tint = Color.White
                             )
-                            Text(
-                                "Gastos",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = Color.White
-                            )
+                            Text("Gastos", style = MaterialTheme.typography.titleSmall, color = Color.White)
                         }
                         Text(
                             "$${currencyFormatter.format(totalExpense)}",
@@ -492,18 +364,11 @@ fun Botones(
 ) {
     Button(
         onClick = onClick,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = Color.White,
-            contentColor = Color.Black
-        ),
+        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
         modifier = Modifier
             .height(85.dp)
             .width(115.dp)
-            .border(
-                2.dp,
-                color = Color(0xFFE0E0E0),
-                shape = RoundedCornerShape(8.dp),
-            )
+            .border(2.dp, Color(0xFFE0E0E0), RoundedCornerShape(8.dp))
             .shadow(8.dp, shape = RoundedCornerShape(18.dp)),
         shape = RoundedCornerShape(16.dp)
     ) {
@@ -514,26 +379,16 @@ fun Botones(
             Box(
                 modifier = Modifier
                     .size(36.dp)
-                    .background(
-                        color = colorResource(R.color.fondo_icono),
-                        shape = CircleShape
-                    ),
+                    .background(color = colorResource(R.color.fondo_icono), shape = CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    painter = icon,
-                    contentDescription = text,
-                    modifier = Modifier.size(18.dp),
-                    tint = tint
-                )
+                Icon(painter = icon, contentDescription = text, modifier = Modifier.size(18.dp), tint = tint)
             }
             Text(
                 text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .wrapContentSize(),
+                modifier = Modifier.fillMaxWidth().wrapContentSize(),
                 fontSize = 12.sp,
                 softWrap = false
             )
@@ -550,39 +405,21 @@ fun ItemTransaccion(
     ingreso: Boolean
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 20.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Column(
-            horizontalAlignment = Alignment.Start
-        ) {
-            Text(
-                categoria,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                descripcion,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.Gray
-            )
+        Column(horizontalAlignment = Alignment.Start) {
+            Text(categoria, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+            Text(descripcion, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
         }
-        Column(
-            horizontalAlignment = Alignment.End
-        ) {
+        Column(horizontalAlignment = Alignment.End) {
             Text(
                 monto,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
                 color = if (ingreso) Color.Green else Color.Red
             )
-            Text(
-                fecha,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.Gray
-            )
+            Text(fecha, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
         }
     }
 }
