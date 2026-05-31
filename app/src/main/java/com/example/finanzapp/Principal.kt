@@ -17,9 +17,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,9 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,13 +50,10 @@ import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
-import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import java.text.NumberFormat
@@ -73,10 +69,39 @@ fun PantallaPrincipal(
     val transactions by viewModel.transactions.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
+
+
+    // Log cuando cambian las transacciones
+    LaunchedEffect(transactions) {
+        println("==========================================")
+        println("[Principal] Transacciones en UI: ${transactions.size}")
+        transactions.forEach { t ->
+            println("UI - ${t.name}: $${t.amount} (${t.type}) - ${t.category}")
+        }
+        // Calcular totales
+        val ingresos = transactions.filter { it.type == "income" }.sumOf { it.amount }
+        val gastos = transactions.filter { it.type == "expense" }.sumOf { it.amount }
+        println("UI - Ingresos: $${ingresos}, Gastos: $${gastos}, Balance: $${ingresos - gastos}")
+        println("==========================================")
+    }
+
+    // Log cuando cambia el estado de carga
+    LaunchedEffect(isLoading) {
+        println("UI - Estado de carga: ${if (isLoading) "CARGANDO..." else "LISTO"}")
+    }
+
     val userName = user?.displayName?.split(" ")?.firstOrNull() ?: "Usuario"
+
+    // Log del usuario
+    LaunchedEffect(Unit) {
+        println("UI - Usuario: $userName")
+        println("UI - Email: ${user?.email ?: "No email"}")
+        println("UI - UID: ${user?.uid ?: "No UID"}")
+    }
 
     // Cargar transacciones
     LaunchedEffect(Unit) {
+        println("UI - Inicializando pantalla principal...")
         viewModel.loadTransactions()
     }
 
@@ -129,6 +154,7 @@ fun PantallaPrincipal(
                     icon = painterResource(R.drawable.mdi),
                     tint = Color.Green,
                     onClick = {
+                        println("UI - Click en botón AGREGAR")
                         navController.navigate("AgregarTransaccion")
                     }
                 )
@@ -137,6 +163,7 @@ fun PantallaPrincipal(
                     icon = painterResource(R.drawable.fluent__history_32_filled),
                     tint = Color.Blue,
                     onClick = {
+                        println("UI - Click en botón HISTORIAL")
                         navController.navigate("Historial")
                     }
                 )
@@ -145,6 +172,7 @@ fun PantallaPrincipal(
                     icon = painterResource(R.drawable.lucide__chart_column),
                     tint = Color.Magenta,
                     onClick = {
+                        println("UI - Click en botón ESTADISTICAS")
                         navController.navigate("Estadisticas")
                     }
                 )
@@ -178,10 +206,12 @@ fun PantallaPrincipal(
                     )
 
                     if (isLoading) {
+                        println("UI - Mostrando indicador de carga...")
                         CircularProgressIndicator(
                             modifier = Modifier.padding(vertical = 20.dp)
                         )
                     } else if (recentTransactions.isEmpty()) {
+                        println("UI - No hay transacciones para mostrar")
                         Text(
                             "No hay transacciones aún",
                             style = MaterialTheme.typography.bodyMedium,
@@ -189,6 +219,7 @@ fun PantallaPrincipal(
                             modifier = Modifier.padding(vertical = 20.dp)
                         )
                     } else {
+                        println("UI - Mostrando ${recentTransactions.size} transacciones recientes")
                         recentTransactions.forEach { transaction ->
                             ItemTransaccion(
                                 categoria = transaction.name,
@@ -207,8 +238,10 @@ fun PantallaPrincipal(
         }
     }
 }
-@Composable
+
+
 @OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun TopBar(userName: String, navController: NavController) {
     TopAppBar(
         modifier = Modifier
@@ -257,6 +290,7 @@ fun TopBar(userName: String, navController: NavController) {
                     }
                 }
                 IconButton(onClick = {
+                    println("UI - Click en botón LOGOUT")
                     FirebaseAuth.getInstance().signOut()
                     navController.navigate("Login") {
                         popUpTo("Principal") { inclusive = true }

@@ -33,20 +33,28 @@ class TransactionViewModel : ViewModel() {
     fun loadTransactions() {
         viewModelScope.launch {
             _isLoading.value = true
+            println("[ViewModel] Iniciando carga de transacciones...")
             try {
-                _transactions.value = repository.getAllTransactions()
+                val transactions = repository.getAllTransactions()
+                println("[ViewModel] Transacciones obtenidas: ${transactions.size}")
+                transactions.forEach { t ->
+                    println("   - ID: ${t.id}, Nombre: ${t.name}, Monto: ${t.amount}, Tipo: ${t.type}")
+                }
+                _transactions.value = transactions
                 _categoryStats.value = repository.getCategoryStats()
                 _monthlyStats.value = repository.getMonthlyStats()
                 _errorMessage.value = null
+                println("[ViewModel] Datos cargados correctamente")
             } catch (e: Exception) {
+                println("[ViewModel] Error: ${e.message}")
                 _errorMessage.value = e.message ?: "Error al cargar datos"
             } finally {
                 _isLoading.value = false
+                println("[ViewModel] Carga finalizada, isLoading: ${_isLoading.value}")
             }
         }
     }
 
-    // Guardar nueva transacción
     suspend fun saveTransaction(
         type: String,
         amount: Double,
@@ -54,12 +62,21 @@ class TransactionViewModel : ViewModel() {
         category: String,
         description: String
     ): Result<String> {
+        println("[ViewModel] Intentando guardar transacción...")
+        println("   - Tipo: $type")
+        println("   - Monto: $amount")
+        println("   - Categoría: $category")
+        println("   - Método de pago: $paymentMethod")
+
         val auth = FirebaseAuth.getInstance()
         val currentUser = auth.currentUser
 
         if (currentUser == null) {
+            println("[ViewModel] Usuario no autenticado")
             return Result.failure(Exception("Usuario no autenticado"))
         }
+
+        println("[ViewModel] Usuario autenticado: ${currentUser.email}")
 
         val transaction = FirestoreTransaction(
             id = UUID.randomUUID().toString(),
@@ -73,23 +90,16 @@ class TransactionViewModel : ViewModel() {
             userId = currentUser.uid
         )
 
+        println("[ViewModel] Transacción a guardar: ${transaction}")
+
         val result = repository.addTransaction(transaction)
 
         if (result.isSuccess) {
-            // Recargar datos después de guardar
+            println("[ViewModel] Transacción guardada exitosamente. ID: ${result.getOrNull()}")
+            println("[ViewModel] Recargando datos...")
             loadTransactions()
-        }
-
-        return result
-    }
-
-    // Eliminar transacción
-    suspend fun deleteTransaction(transactionId: String): Result<Unit> {
-        val result = repository.deleteTransaction(transactionId)
-
-        if (result.isSuccess) {
-            // Recargar datos después de eliminar
-            loadTransactions()
+        } else {
+            println("[ViewModel] Error al guardar: ${result.exceptionOrNull()?.message}")
         }
 
         return result

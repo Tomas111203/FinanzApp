@@ -55,11 +55,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.util.Date
-import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,6 +65,8 @@ fun AgregarTransaccionScreen(
     onBackClick: () -> Unit = {},
     onSaveClick: () -> Unit = {}
 ) {
+    println("[Transaccion] Inicializando pantalla de Agregar Transacción")
+
     var selectedType by remember { mutableStateOf("expense") }
     var amount by remember { mutableStateOf("") }
     var selectedPaymentMethod by remember { mutableStateOf("") }
@@ -78,18 +77,19 @@ fun AgregarTransaccionScreen(
     // Estados
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var successMessage by remember { mutableStateOf<String?>(null) }  // ← Agrega esto
+    var successMessage by remember { mutableStateOf<String?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-
-// Mostrar mensajes (ERROR o ÉXITO)
-    LaunchedEffect(errorMessage, successMessage) {  // ← Escucha ambos
+    // Mostrar mensajes (ERROR o ÉXITO)
+    LaunchedEffect(errorMessage, successMessage) {
         errorMessage?.let {
+            println("[Transaccion] Mostrando error: $it")
             snackbarHostState.showSnackbar(it)
             errorMessage = null
         }
         successMessage?.let {
+            println("[Transaccion] Mostrando éxito: $it")
             snackbarHostState.showSnackbar(it)
             successMessage = null
         }
@@ -117,7 +117,10 @@ fun AgregarTransaccionScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
-                        onClick = onBackClick,
+                        onClick = {
+                            println("[Transaccion] Click en botón VOLVER")
+                            onBackClick()
+                        },
                         modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
@@ -170,7 +173,10 @@ fun AgregarTransaccionScreen(
                 FilterChip(
                     modifier = Modifier.weight(1f),
                     selected = selectedType == "expense",
-                    onClick = { selectedType = "expense" },
+                    onClick = {
+                        println("[Transaccion] Seleccionado: GASTO")
+                        selectedType = "expense"
+                    },
                     label = {
                         Text(
                             "Gasto",
@@ -190,7 +196,10 @@ fun AgregarTransaccionScreen(
                 FilterChip(
                     modifier = Modifier.weight(1f),
                     selected = selectedType == "income",
-                    onClick = { selectedType = "income" },
+                    onClick = {
+                        println("[Transaccion] Seleccionado: INGRESO")
+                        selectedType = "income"
+                    },
                     label = {
                         Text(
                             "Ingreso",
@@ -218,7 +227,10 @@ fun AgregarTransaccionScreen(
 
             OutlinedTextField(
                 value = amount,
-                onValueChange = { amount = it },
+                onValueChange = {
+                    amount = it
+                    println("[Transaccion] Monto cambiado: $it")
+                },
                 placeholder = { Text("0.00") },
                 leadingIcon = { Text("$", fontSize = 20.sp, fontWeight = FontWeight.Bold) },
                 modifier = Modifier.fillMaxWidth(),
@@ -252,7 +264,10 @@ fun AgregarTransaccionScreen(
                     FilterChip(
                         modifier = Modifier.weight(1f),
                         selected = selectedPaymentMethod == method,
-                        onClick = { selectedPaymentMethod = method },
+                        onClick = {
+                            println("[Transaccion] Método de pago seleccionado: $method")
+                            selectedPaymentMethod = method
+                        },
                         label = {
                             Text(method, fontSize = 12.sp)
                         },
@@ -287,7 +302,10 @@ fun AgregarTransaccionScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp)
-                        .clickable { showCategoryDropdown = true }
+                        .clickable {
+                            println("[Transaccion] Abriendo dropdown de categorías")
+                            showCategoryDropdown = true
+                        }
                         .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
                     shape = RoundedCornerShape(12.dp),
                     color = Color.White
@@ -314,7 +332,9 @@ fun AgregarTransaccionScreen(
 
                 DropdownMenu(
                     expanded = showCategoryDropdown,
-                    onDismissRequest = { showCategoryDropdown = false },
+                    onDismissRequest = {
+                        showCategoryDropdown = false
+                    },
                     modifier = Modifier.fillMaxWidth(0.9f)
                 ) {
                     categories.forEach { category ->
@@ -323,6 +343,7 @@ fun AgregarTransaccionScreen(
                                 Text(category, fontSize = 14.sp)
                             },
                             onClick = {
+                                println("[Transaccion] Categoría seleccionada: $category")
                                 selectedCategory = category
                                 showCategoryDropdown = false
                             }
@@ -349,7 +370,10 @@ fun AgregarTransaccionScreen(
 
             OutlinedTextField(
                 value = description,
-                onValueChange = { description = it },
+                onValueChange = {
+                    description = it
+                    println("[Transaccion] Descripción cambiada: $it")
+                },
                 placeholder = { Text("Ej: Compra del supermercado") },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -357,13 +381,24 @@ fun AgregarTransaccionScreen(
                 minLines = 2
             )
 
-
             Button(
                 onClick = {
+                    println("==========================================")
+                    println("[Transaccion] Click en botón GUARDAR")
+                    println("   Tipo: $selectedType")
+                    println("   Monto: $amount")
+                    println("   Método pago: $selectedPaymentMethod")
+                    println("   Categoría: $selectedCategory")
+                    println("   Descripción: $description")
+                    println("==========================================")
+
                     if (validateForm(amount, selectedPaymentMethod, selectedCategory)) {
+                        println("[Transaccion] Formulario válido")
                         isLoading = true
+                        println("[Transaccion] isLoading = true")
+
                         scope.launch {
-                            // Usar viewModel.saveTransaction en lugar de saveTransaction
+                            println("[Transaccion] Llamando a viewModel.saveTransaction()...")
                             val result = viewModel.saveTransaction(
                                 type = selectedType,
                                 amount = amount.toDouble(),
@@ -373,16 +408,25 @@ fun AgregarTransaccionScreen(
                             )
 
                             isLoading = false
+                            println("[Transaccion] isLoading = false")
 
                             if (result.isSuccess) {
-                                successMessage = "✅ Transacción guardada exitosamente"
+                                println("[Transaccion] Transacción guardada con éxito!")
+                                successMessage = " Transacción guardada exitosamente"
                                 delay(1500)
+                                println(" [Transaccion] Llamando a onSaveClick()...")
                                 onSaveClick()
                             } else {
-                                errorMessage = result.exceptionOrNull()?.message ?: "Error al guardar"
+                                val error = result.exceptionOrNull()?.message ?: "Error al guardar"
+                                println(" [Transaccion] Error: $error")
+                                errorMessage = error
                             }
                         }
                     } else {
+                        println(" [Transaccion] Formulario INVALIDO")
+                        println("   - Monto válido: ${amount.toDoubleOrNull() != null && amount.toDoubleOrNull()!! > 0}")
+                        println("   - Método pago: ${selectedPaymentMethod.isNotEmpty()}")
+                        println("   - Categoría: ${selectedCategory.isNotEmpty()}")
                         scope.launch {
                             snackbarHostState.showSnackbar("Por favor completa todos los campos obligatorios")
                         }
@@ -427,62 +471,17 @@ private fun validateForm(
     category: String
 ): Boolean {
     val amountValue = amount.toDoubleOrNull()
-    return amountValue != null && amountValue > 0 &&
+    val isValid = amountValue != null && amountValue > 0 &&
             paymentMethod.isNotEmpty() &&
             category.isNotEmpty()
-}
 
-// Función para guardar la transacción en Firestore
-private suspend fun saveTransaction(
-    repository: TransactionRepository,
-    type: String,
-    amount: Double,
-    paymentMethod: String,
-    category: String,
-    description: String,
-    onSuccess: () -> Unit,
-    onError: (String) -> Unit
-) {
-    try {
-        // VERIFICAR AUTENTICACIÓN PRIMERO
-        val auth = FirebaseAuth.getInstance()
-        val currentUser = auth.currentUser
+    println(" [Transaccion] Validando formulario...")
+    println("   - amountValue: $amountValue")
+    println("   - paymentMethod: $paymentMethod")
+    println("   - category: $category")
+    println("   - isValid: $isValid")
 
-        if (currentUser == null) {
-            onError("No hay usuario autenticado. Debes iniciar sesión.")
-            return
-        }
-
-        println("Usuario autenticado: ${currentUser.email} (UID: ${currentUser.uid})")
-
-        // Crear objeto FirestoreTransaction
-        val transaction = FirestoreTransaction(
-            id = UUID.randomUUID().toString(),
-            name = if (type == "income") "Ingreso" else "Gasto",
-            amount = amount,
-            category = category,
-            date = Date(),
-            type = type,
-            description = description,
-            paymentMethod = paymentMethod,
-            userId = currentUser.uid  // ← Usar el UID real
-        )
-
-        // Guardar en Firestore
-        val result = repository.addTransaction(transaction)
-
-        if (result.isSuccess) {
-            println("Transacción guardada exitosamente")
-            onSuccess()
-        } else {
-            val error = result.exceptionOrNull()
-            println("Error al guardar: ${error?.message}")
-            onError(error?.message ?: "Error al guardar la transacción")
-        }
-    } catch (e: Exception) {
-        println("Excepción: ${e.message}")
-        onError(e.message ?: "Error inesperado al guardar")
-    }
+    return isValid
 }
 
 @Preview(showSystemUi = true)
