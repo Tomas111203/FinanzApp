@@ -55,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -64,6 +65,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.text.NumberFormat
+import java.util.Locale
+import androidx.compose.ui.text.input.TextFieldValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,7 +79,6 @@ fun AgregarTransaccionScreen(
     println("[Transaccion] Inicializando pantalla de Agregar Transacción")
 
     var selectedType by remember { mutableStateOf("expense") }
-    var amount by remember { mutableStateOf("") }
     var selectedPaymentMethod by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -192,6 +195,8 @@ fun AgregarTransaccionScreen(
                     onClick = {
                         println("[Transaccion] Seleccionado: GASTO")
                         selectedType = "expense"
+                        selectedCategory = ""
+                        selectedPaymentMethod=""
                     },
                     label = {
                         Box(
@@ -225,6 +230,7 @@ fun AgregarTransaccionScreen(
                         println("[Transaccion] Seleccionado: INGRESO")
                         selectedType = "income"
                         //  Limpiar método de pago al cambiar a ingreso
+                        selectedCategory = ""
                         selectedPaymentMethod = ""
                     },
                     label = {
@@ -259,11 +265,124 @@ fun AgregarTransaccionScreen(
                 color = Color.Gray
             )
 
+            var textFieldValue by remember { mutableStateOf(TextFieldValue("")) }
+            var realAmount by remember { mutableStateOf("") }
+            var amountError by remember { mutableStateOf(false) }
+
+            // Función para formatear con comas (solo parte entera)
+            fun formatWithCommas(value: String): String {
+                if (value.isEmpty()) return ""
+
+                val parts = value.split(".")
+                val integerPart = parts[0]
+                val decimalPart = if (parts.size > 1) ".${parts[1]}" else ""
+
+                if (integerPart.isEmpty()) return value
+
+                // Agregar comas cada 3 dígitos desde la derecha
+                val formattedInteger = integerPart.reversed().chunked(3).joinToString(",").reversed()
+
+                return formattedInteger + decimalPart
+            }
+
+            // Función para quitar comas
+            fun removeCommas(value: String): String = value.replace(",", "")
+
+            // Función para validar y procesar entrada
+            fun processInput(input: String): String {
+                var result = ""
+                var hasDecimal = false
+                var decimalCount = 0
+
+                for (char in input) {
+                    when {
+                        char.isDigit() -> {
+                            if (hasDecimal) {
+                                if (decimalCount < 2) {
+                                    result += char
+                                    decimalCount++
+                                }
+                            } else {
+                                result += char
+                            }
+                        }
+                        char == '.' && !hasDecimal -> {
+                            result += char
+                            hasDecimal = true
+                        }
+                    }
+                }
+
+                return result
+            }
+
+            // Calcular nueva posición del cursor después del formato (CORREGIDO)
+            fun calculateNewCursorPosition(
+                oldFormatted: String,
+                newFormatted: String,
+                oldCursorPos: Int,
+                isDeleting: Boolean
+            ): Int {
+                if (oldFormatted == newFormatted) return oldCursorPos
+
+                if (isDeleting) {
+                    // Al borrar, el cursor debe mantenerse en la misma posición relativa
+                    // pero ajustada por la eliminación de comas
+                    val oldPosWithoutCommas = oldFormatted.take(oldCursorPos).count { it != ',' }
+                    val newPosWithoutCommas = newFormatted.take(oldCursorPos).count { it != ',' }
+
+                    if (newFormatted.length <= oldCursorPos) {
+                        return newFormatted.length
+                    }
+
+                    return oldCursorPos
+                } else {
+                    // Al agregar, ajustar por las comas nuevas
+                    val oldCommaCount = oldFormatted.take(oldCursorPos).count { it == ',' }
+                    val newCommaCount = newFormatted.take(oldCursorPos).count { it == ',' }
+
+                    return (oldCursorPos + (newCommaCount - oldCommaCount)).coerceIn(0, newFormatted.length)
+                }
+            }
+
             OutlinedTextField(
-                value = amount,
-                onValueChange = {
-                    amount = it
-                    println("[Transaccion] Monto cambiado: $it")
+                value = textFieldValue,
+                onValueChange = { newValue ->
+                    val oldText = textFieldValue.text
+                    val newText = newValue.text
+
+                    // Detectar si es una operación de borrado
+                    val isDeleting = newText.length < oldText.length
+
+                    // Obtener el texto sin formato
+                    val currentRaw = removeCommas(newText)
+
+                    // Procesar la entrada
+                    val processedRaw = processInput(currentRaw)
+
+                    // Formatear el texto procesado
+                    val formattedText = formatWithCommas(processedRaw)
+
+                    // Calcular nueva posición del cursor
+                    val newCursorPos = calculateNewCursorPosition(
+                        oldFormatted = oldText,
+                        newFormatted = formattedText,
+                        oldCursorPos = newValue.selection.start,
+                        isDeleting = isDeleting
+                    )
+
+                    // Actualizar el TextFieldValue
+                    textFieldValue = TextFieldValue(
+                        text = formattedText,
+                        selection = TextRange(newCursorPos.coerceIn(0, formattedText.length))
+                    )
+
+
+                    // Actualizar el valor real (sin formato)
+                    realAmount = processedRaw  // ← AHORA usa realAmount
+                    amountError = processedRaw.isNotEmpty() && processedRaw != "." && processedRaw.toDoubleOrNull() == null
+
+                    println("[Transaccion] Monto cambiado: $realAmount")
                 },
                 placeholder = { Text("0.00") },
                 leadingIcon = { Text("$", fontSize = 20.sp, fontWeight = FontWeight.Bold) },
@@ -271,10 +390,19 @@ fun AgregarTransaccionScreen(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp),
-                isError = amount.isNotEmpty() && amount.toDoubleOrNull() == null
+                isError = amountError,
+                supportingText = {
+                    if (amountError) {
+                        Text(
+                            "Ingresa un monto válido (máximo 2 decimales)",
+                            fontSize = 11.sp,
+                            color = Color(0xFFDC2626)
+                        )
+                    }
+                }
             )
 
-            if (amount.isNotEmpty() && amount.toDoubleOrNull() == null) {
+            if (textFieldValue.text.isNotEmpty() && removeCommas(textFieldValue.text) != "." && removeCommas(textFieldValue.text).toDoubleOrNull() == null) {
                 Text(
                     text = "Ingresa un monto válido",
                     fontSize = 11.sp,
@@ -619,8 +747,8 @@ fun AgregarTransaccionScreen(
                         )
 
                         // Mostrar mensualidad estimada
-                        if (selectedInstallments > 0 && amount.toDoubleOrNull() != null) {
-                            val monto = amount.toDoubleOrNull() ?: 0.0
+                        if (selectedInstallments > 0 && realAmount.toDoubleOrNull() != null) {
+                            val monto = realAmount.toDoubleOrNull() ?: 0.0
                             val mensualidad = monto / selectedInstallments
                             if (monto > 0) {
                                 Card(
@@ -758,7 +886,7 @@ fun AgregarTransaccionScreen(
                     println("==========================================")
                     println("[Transaccion] Click en botón GUARDAR")
                     println("   Tipo: $selectedType")
-                    println("   Monto: $amount")
+                    println("   Monto: $realAmount")
                     println("   Método pago: $selectedPaymentMethod")
                     println("   Categoría: $selectedCategory")
                     println("   Descripción: $description")
@@ -766,9 +894,9 @@ fun AgregarTransaccionScreen(
 
                     //  Validar según el tipo de transacción
                     val isValid = if (selectedType == "expense") {
-                        validateForm(amount, selectedPaymentMethod, selectedCategory)
+                        validateForm(realAmount, selectedPaymentMethod, selectedCategory)
                     } else {
-                        validateIncomeForm(amount, selectedCategory)
+                        validateIncomeForm(realAmount, selectedCategory)
                     }
 
                     if (isValid) {
@@ -780,7 +908,7 @@ fun AgregarTransaccionScreen(
                             println("[Transaccion] Llamando a viewModel.saveTransaction()...")
                             val result = viewModel.saveTransaction(
                                 type = selectedType,
-                                amount = amount.toDouble(),
+                                amount = realAmount.toDouble(),
                                 paymentMethod = if (selectedType == "expense") selectedPaymentMethod else "",
                                 category = selectedCategory,
                                 description = description,
