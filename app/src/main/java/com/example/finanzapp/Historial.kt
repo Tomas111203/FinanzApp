@@ -194,32 +194,6 @@ fun HistorialScreen(
                         color = Color.Black,
                         modifier = Modifier.weight(1f)
                     )
-                    // Botones para agregar transacciones
-                    IconButton(
-                        onClick = {
-                            transactionType = "income"
-                            showAddDialog = true
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Agregar Ingreso",
-                            tint = Color(0xFF16A34A)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(
-                        onClick = {
-                            transactionType = "expense"
-                            showAddDialog = true
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Remove,
-                            contentDescription = "Agregar Gasto",
-                            tint = Color(0xFFDC2626)
-                        )
-                    }
                 }
             }
         },
@@ -474,7 +448,11 @@ fun HistorialScreen(
                                             "$${currencyFormatter.format(selectedTransaction!!.amount)}"
                                         )
                                         DetailRow("Tipo", if (selectedTransaction!!.type == "income") "Ingreso" else "Gasto")
-                                        DetailRow("Método de pago", selectedTransaction!!.paymentMethod.ifEmpty { "N/A" })
+                                        if(selectedTransaction!!.type!="income") {
+                                            DetailRow(
+                                                "Método de pago",
+                                                selectedTransaction!!.paymentMethod.ifEmpty { "N/A" })
+                                        }
                                         DetailRow("Fecha", dateFormatter.format(selectedTransaction!!.date))
 
                                         if (selectedTransaction!!.description.isNotBlank()) {

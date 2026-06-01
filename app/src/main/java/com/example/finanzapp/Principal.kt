@@ -26,14 +26,19 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,6 +63,9 @@ import com.google.firebase.auth.FirebaseUser
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Locale
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 @Composable
 fun PantallaPrincipal(
@@ -69,44 +77,42 @@ fun PantallaPrincipal(
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
 
-    // Carga inicial
+    // Estado para controlar la primera carga
+    var isFirstLoad by remember { mutableStateOf(true) }
+
+    // Carga inicial - solo si no hay datos y no está cargando
     LaunchedEffect(Unit) {
         println("[Principal] Carga inicial...")
-        if (transactions.isEmpty() && !isLoading) {
+        if (transactions.isEmpty() && !isLoading && isFirstLoad) {
+            isFirstLoad = false
             viewModel.loadTransactions()
         }
     }
 
-    //  Recargar cada vez que la pantalla se reanuda
+    // Recargar cuando la pantalla se reanuda - usando LifecycleResumeEffect
     LifecycleResumeEffect(Unit) {
         println("[Principal] ON_RESUME - Recargando...")
-        viewModel.loadTransactions()
+        // Solo recargar si ya hay datos o si no está cargando
+        if (transactions.isNotEmpty() || !isLoading) {
+            viewModel.loadTransactions()
+        }
         onPauseOrDispose { }
     }
 
     val userName = user?.displayName?.split(" ")?.firstOrNull() ?: "Usuario"
 
-    // Calcular totales
-    // Con este nuevo código:
+    // Calcular totales - con valores por defecto seguros
     val totalIncome = transactions.filter { it.type == "income" }.sumOf { it.amount }
-
-// GASTOS REALES (los que ya salieron de tu cuenta)
     val realExpenses = transactions.filter {
         it.type == "expense" &&
-                it.paymentMethod != "Tarjeta de Crédito"  // Solo efectivo y débito
+                it.paymentMethod != "Tarjeta de Crédito"
     }.sumOf { it.amount }
-
-// Pagos que ya hiciste de la tarjeta de crédito
     val creditCardTransfers = transactions.filter {
         it.type == "transfer" && it.paymentMethod == "Transferencia"
     }.sumOf { it.amount }
-
     val totalRealExpense = realExpenses + creditCardTransfers
-    val totalBalance = totalIncome - totalRealExpense  // ✅ Balance REAL
-
-// Para estadísticas (muestra el gasto completo aunque sea a crédito)
+    val totalBalance = totalIncome - totalRealExpense
     val totalExpenseForStats = transactions.filter { it.type == "expense" }.sumOf { it.amount }
-
     val totalCreditDebt = transactions.filter {
         it.type == "expense" &&
                 it.paymentMethod == "Tarjeta de Crédito"
@@ -117,162 +123,166 @@ fun PantallaPrincipal(
 
     val recentTransactions = transactions.take(5)
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
-            // TopBar
-            item {
-                TopBar(userName = userName, navController = navController)
-            }
-
-            // Balance
-            item {
-                Balance(
-                    totalBalance = totalBalance,
-                    totalIncome = totalIncome,
-                    totalExpense = totalRealExpense,
-                    currencyFormatter = currencyFormatter,
-                    totalCreditDebt = totalCreditDebt,
-                    transactions = transactions
+    // Mostrar pantalla de carga mientras se cargan los datos por primera vez
+    if (isLoading && transactions.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(
+                    color = Color(0xFF16A34A),
+                    modifier = Modifier.size(48.dp)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Cargando tus finanzas...",
+                    fontSize = 14.sp,
+                    color = Color.Gray
                 )
             }
+        }
+    } else {
+        Box(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                // TopBar
+                item {
+                    TopBar(userName = userName, navController = navController)
+                }
 
-            // Botones
-            item {
-                Row(
-                    horizontalArrangement = Arrangement.SpaceAround,
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp, start=2.dp, bottom=2.dp)
-                ) {
-                    Botones("Agregar", painterResource(R.drawable.mdi), Color(0xFF00A63E)) {
-                        navController.navigate("AgregarTransaccion")
-                    }
-                    Botones(
-                        "Historial",
-                        painterResource(R.drawable.fluent__history_32_filled),
-                        Color.Blue
+                // Balance
+                item {
+                    Balance(
+                        totalBalance = totalBalance,
+                        totalIncome = totalIncome,
+                        totalExpense = totalRealExpense,
+                        currencyFormatter = currencyFormatter,
+                        totalCreditDebt = totalCreditDebt,
+                        transactions = transactions
+                    )
+                }
+
+                // Botones
+                item {
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        modifier = Modifier.fillMaxWidth().padding(top = 2.dp, start = 2.dp, bottom = 2.dp)
                     ) {
-                        navController.navigate("Historial")
+                        Botones("Agregar", painterResource(R.drawable.mdi), Color(0xFF00A63E)) {
+                            navController.navigate("AgregarTransaccion")
+                        }
+                        Botones(
+                            "Historial",
+                            painterResource(R.drawable.fluent__history_32_filled),
+                            Color.Blue
+                        ) {
+                            navController.navigate("Historial")
+                        }
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        modifier = Modifier.fillMaxWidth().padding(top = 2.dp, end = 2.dp, bottom = 2.dp)
+                    ) {
+                        Botones("Estadisticas", painterResource(R.drawable.lucide__chart_column), Color.Magenta) {
+                            navController.navigate("Estadisticas")
+                        }
+                        Botones("Pagar TC", painterResource(R.drawable.lucide__credit_card), Color(0xFF3B82F6)) {
+                            navController.navigate("PagarTC")
+                        }
                     }
                 }
-                Row(
-                    horizontalArrangement = Arrangement.SpaceAround,
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp, end= 2.dp, bottom=2.dp)
-                ) {
-                    Botones("Estadisticas", painterResource(R.drawable.lucide__chart_column), Color.Magenta) {
-                        navController.navigate("Estadisticas")
-                    }
-                    Botones("Pagar TC",painterResource(R.drawable.lucide__credit_card), Color(0xFF3B82F6)
+
+                // Transacciones recientes
+                item {
+                    Surface(
+                        modifier = Modifier
+                            .imePadding()
+                            .padding(15.dp)
+                            .fillMaxWidth()
+                            .border(2.dp, Color(0xFF), RoundedCornerShape(16.dp))
+                            .shadow(8.dp, shape = RoundedCornerShape(20.dp)),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        shape = RoundedCornerShape(16.dp)
                     ) {
-                        navController.navigate("PagarTC")
-                    }
+                        Column(modifier = Modifier.padding(15.dp)) {
+                            Text(
+                                "Transacciones Recientes",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
 
-                }
-            }
+                            when {
+                                recentTransactions.isNotEmpty() -> {
+                                    recentTransactions.forEach { transaction ->
+                                        val esTC = transaction.paymentMethod == "Tarjeta de Crédito"
+                                        val esPagoTC = transaction.type == "transfer" && transaction.paymentMethod == "Transferencia"
 
-            // Transacciones recientes
-            item {
-                Surface(
-                    modifier = Modifier
-                        .imePadding()
-                        .padding(15.dp)
-                        .fillMaxWidth()
-                        .border(2.dp, Color(0xFF), RoundedCornerShape(16.dp))
-                        .shadow(8.dp, shape = RoundedCornerShape(20.dp)),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(modifier = Modifier.padding(15.dp)) {
-                        Text(
-                            "Transacciones Recientes",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
+                                        val montoTexto = when {
+                                            transaction.type == "income" -> "+$${currencyFormatter.format(transaction.amount)}"
+                                            esPagoTC -> "-$${currencyFormatter.format(transaction.amount)}"
+                                            esTC -> "$${currencyFormatter.format(transaction.amount)}"
+                                            else -> "-$${currencyFormatter.format(transaction.amount)}"
+                                        }
 
-                        when {
-                            // Mostrar transacciones si hay
-                            recentTransactions.isNotEmpty() -> {
-                                recentTransactions.forEach { transaction ->
-                                    // Determinar si es tarjeta de crédito
-                                    val esTC = transaction.paymentMethod == "Tarjeta de Crédito"
-                                    val esTransferenciaTC = transaction.type == "transfer" && transaction.paymentMethod == "Transferencia"
-                                    val esPagoTC = esTransferenciaTC  // Para mayor claridad
-
-                                    // Para transferencias de pago de TC, no mostrar signo
-                                    val montoTexto = when {
-                                        transaction.type == "income" -> {
-                                            "+$${currencyFormatter.format(transaction.amount)}"
-                                        }
-                                        esPagoTC -> {
-                                            "-$${currencyFormatter.format(transaction.amount)}"  // ← Con signo -
-                                        }
-                                        esTC -> {
-                                            "$${currencyFormatter.format(transaction.amount)}"  // ← Sin signo, solo el monto
-                                        }
-                                        else -> {
-                                            "-$${currencyFormatter.format(transaction.amount)}"  // Gastos normales con -
-                                        }
+                                        ItemTransaccion(
+                                            categoria = if (esPagoTC) "Pago Tarjeta" else transaction.name,
+                                            descripcion = if (esPagoTC) transaction.description else transaction.category,
+                                            monto = montoTexto,
+                                            fecha = dateFormatter.format(transaction.date),
+                                            ingreso = transaction.type == "income",
+                                            esTarjetaCredito = esTC,
+                                            meses = if (esTC) transaction.creditInstallments else 1,
+                                            pagado = if (esTC) transaction.creditPaidSoFar else 0.0,
+                                            total = if (esTC) transaction.amount else 0.0
+                                        )
                                     }
-
-                                    // Para transacciones de TC, mostrar información adicional
-                                    val mostrarInfoTC = esTC && transaction.creditInstallments > 1
-
-                                    ItemTransaccion(
-                                        categoria = if (esTransferenciaTC) "Pago Tarjeta" else transaction.name,
-                                        descripcion = if (esTransferenciaTC) transaction.description else transaction.category,
-                                        monto = montoTexto,
-                                        fecha = dateFormatter.format(transaction.date),
-                                        ingreso = transaction.type == "income",
-                                        esTarjetaCredito = esTC,
-                                        meses = if (esTC) transaction.creditInstallments else 1,
-                                        pagado = if (esTC) transaction.creditPaidSoFar else 0.0,
-                                        total = if (esTC) transaction.amount else 0.0
+                                }
+                                isLoading -> {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth().padding(20.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator()
+                                    }
+                                }
+                                else -> {
+                                    Text(
+                                        "No hay transacciones aún",
+                                        modifier = Modifier.padding(vertical = 20.dp)
                                     )
                                 }
-                            }
-                            // Mostrar loader solo en primera carga sin datos
-                            isLoading && transactions.isEmpty() -> {
-                                Box(
-                                    modifier = Modifier.fillMaxWidth().padding(20.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator()
-                                }
-                            }
-                            // Mostrar mensaje si no hay transacciones
-                            else -> {
-                                Text(
-                                    "No hay transacciones aún",
-                                    modifier = Modifier.padding(vertical = 20.dp)
-                                )
                             }
                         }
                     }
                 }
             }
-        }
 
-        // Indicador de carga overlay (solo cuando recarga pero ya hay datos)
-        if (isLoading && transactions.isNotEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = 200.dp),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                CircularProgressIndicator(modifier = Modifier.size(40.dp))
-            }
-        }
-
-        // Error message
-        errorMessage?.let { error ->
-            androidx.compose.material3.Snackbar(
-                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
-                action = {
-                    androidx.compose.material3.TextButton(onClick = { viewModel.loadTransactions() }) {
-                        Text("Reintentar")
-                    }
+            // Indicador de carga overlay
+            if (isLoading && transactions.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 200.dp),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(40.dp))
                 }
-            ) {
-                Text(error)
+            }
+
+            // Error message
+            errorMessage?.let { error ->
+                Snackbar(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(16.dp),
+                    action = {
+                        TextButton(onClick = { viewModel.loadTransactions() }) {
+                            Text("Reintentar")
+                        }
+                    }
+                ) {
+                    Text(error)
+                }
             }
         }
     }

@@ -22,8 +22,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -34,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -359,65 +363,298 @@ fun AgregarTransaccionScreen(
             }
 
             // 3.5 MESES PARA TARJETA DE CRÉDITO (solo si se seleccionó TC)
+            // 3.5 MESES PARA TARJETA DE CRÉDITO (solo si se seleccionó TC)
             var selectedInstallments by remember { mutableStateOf(1) }
             var showInstallmentsError by remember { mutableStateOf(false) }
+            var customMonths by remember { mutableStateOf("") }
 
             if (selectedType == "expense" && selectedPaymentMethod == "Tarjeta de Crédito") {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "¿A cuántos meses?",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.Gray
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // Box para agrupar y controlar el espaciado
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 0.dp)  // Sin padding superior para reducir espacio
                 ) {
-                    // Botones rápidos para meses comunes
-                    listOf(1, 3, 6, 12).forEach { months ->
-                        FilterChip(
-                            selected = selectedInstallments == months,
-                            onClick = {
-                                selectedInstallments = months
-                                showInstallmentsError = false
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)  // Espacio reducido entre elementos
+                    ) {
+                        // Título
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.lucide__credit_card),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = Color(0xFF3B82F6)
+                            )
+                            Text(
+                                text = "Plazo de pago",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.Gray
+                            )
+                        }
+
+                        // Fila 1: Contado y 3 meses
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = selectedInstallments == 1,
+                                onClick = {
+                                    selectedInstallments = 1
+                                    customMonths = ""
+                                    showInstallmentsError = false
+                                },
+                                label = {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ){
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = if (selectedInstallments == 1) Color.White else Color(
+                                                    0xFF3B82F6
+                                                )
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Contado", fontSize = 13.sp)
+                                        }
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(56.dp),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF3B82F6),
+                                    selectedLabelColor = Color.White,
+                                    disabledContainerColor = Color(0xFFEFF6FF),
+                                    disabledLabelColor = Color(0xFF3B82F6)
+                                )
+                            )
+
+                            FilterChip(
+                                selected = selectedInstallments == 3,
+                                onClick = {
+                                    selectedInstallments = 3
+                                    customMonths = ""
+                                    showInstallmentsError = false
+                                },
+                                label = {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(
+                                                "3",
+                                                fontSize = 16.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text("meses", fontSize = 10.sp)
+                                        }
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(56.dp),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF3B82F6),
+                                    selectedLabelColor = Color.White,
+                                    disabledContainerColor = Color(0xFFEFF6FF),
+                                    disabledLabelColor = Color(0xFF3B82F6)
+                                )
+                            )
+                        }
+
+                        // Fila 2: 6 y 12 meses
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = selectedInstallments == 6,
+                                onClick = {
+                                    selectedInstallments = 6
+                                    customMonths = ""
+                                    showInstallmentsError = false
+                                },
+                                label = {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(
+                                                "6",
+                                                fontSize = 16.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text("meses", fontSize = 10.sp)
+                                        }
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(56.dp),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF3B82F6),
+                                    selectedLabelColor = Color.White,
+                                    disabledContainerColor = Color(0xFFEFF6FF),
+                                    disabledLabelColor = Color(0xFF3B82F6)
+                                )
+                            )
+
+                            FilterChip(
+                                selected = selectedInstallments == 12,
+                                onClick = {
+                                    selectedInstallments = 12
+                                    customMonths = ""
+                                    showInstallmentsError = false
+                                },
+                                label = {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(
+                                                "12",
+                                                fontSize = 16.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text("meses", fontSize = 10.sp)
+                                        }
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(56.dp),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF3B82F6),
+                                    selectedLabelColor = Color.White,
+                                    disabledContainerColor = Color(0xFFEFF6FF),
+                                    disabledLabelColor = Color(0xFF3B82F6)
+                                )
+                            )
+                        }
+
+                        // Separador "o" - más compacto
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = "o",
+                                fontSize = 11.sp,
+                                color = Color.Gray
+                            )
+                        }
+
+                        // Campo para meses personalizados
+                        OutlinedTextField(
+                            value = customMonths,
+                            onValueChange = {
+                                customMonths = it
+                                val value = it.toIntOrNull()
+                                if (value != null && value in 1..36) {
+                                    selectedInstallments = value
+                                    showInstallmentsError = false
+                                } else if (it.isNotEmpty()) {
+                                    showInstallmentsError = true
+                                } else {
+                                    selectedInstallments = 1
+                                    showInstallmentsError = false
+                                }
                             },
-                            label = {
-                                Text(if (months == 1) "Contado" else "$months meses")
+                            placeholder = {
+                                Text(
+                                    "Escribe otros meses (ej: 9, 18, 24)",
+                                    fontSize = 12.sp
+                                )
                             },
-                            modifier = Modifier.weight(1f)
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color(0xFF3B82F6)
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            isError = showInstallmentsError,
+                            shape = RoundedCornerShape(10.dp),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF3B82F6),
+                                unfocusedBorderColor = Color.LightGray,
+                                errorBorderColor = Color(0xFFDC2626)
+                            ),
+                            supportingText = {
+                                if (showInstallmentsError) {
+                                    Text(
+                                        "Ingresa un número entre 1 y 36 meses",
+                                        fontSize = 10.sp,
+                                        color = Color(0xFFDC2626)
+                                    )
+                                } else if (customMonths.isEmpty() && selectedInstallments <= 12) {
+                                    Text(
+                                        "Selecciona un plazo o ingresa uno personalizado",
+                                        fontSize = 10.sp,
+                                        color = Color.Gray
+                                    )
+                                }
+                            }
                         )
+
+                        // Mostrar mensualidad estimada
+                        if (selectedInstallments > 0 && amount.toDoubleOrNull() != null) {
+                            val monto = amount.toDoubleOrNull() ?: 0.0
+                            val mensualidad = monto / selectedInstallments
+                            if (monto > 0) {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = Color(0xFFF0F9FF)
+                                    ),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "💳 Mensualidad estimada:",
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF3B82F6)
+                                        )
+                                        Text(
+                                            text = "$${String.format("%.2f", mensualidad)}",
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF3B82F6)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Para meses personalizados
-                OutlinedTextField(
-                    value = if (selectedInstallments > 12) selectedInstallments.toString() else "",
-                    onValueChange = {
-                        val value = it.toIntOrNull()
-                        if (value != null && value in 1..36) {
-                            selectedInstallments = value
-                            showInstallmentsError = false
-                        } else if (it.isEmpty()) {
-                            selectedInstallments = 1
-                        } else {
-                            showInstallmentsError = true
-                        }
-                    },
-                    placeholder = { Text("Otros meses (1-36)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    isError = showInstallmentsError,
-                    supportingText = {
-                        if (showInstallmentsError) {
-                            Text("Ingresa un número entre 1 y 36")
-                        }
-                    }
-                )
             }
-
 
             // 4. CATEGORÍA
             Text(

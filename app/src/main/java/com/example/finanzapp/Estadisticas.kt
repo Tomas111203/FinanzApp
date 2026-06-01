@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -357,7 +358,6 @@ fun EstadisticasScreen(
                     }
 
 
-                    // Gráfico de barras mensual
                     // Gráfico de barras mensual - SOLO ÚLTIMO MES
                     item {
                         Card(
@@ -372,7 +372,7 @@ fun EstadisticasScreen(
                                 modifier = Modifier.padding(16.dp)
                             ) {
                                 Text(
-                                    text = "Ingresos vs Gastos (último mes)",
+                                    text = "Ingresos vs Gastos",
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.Black
@@ -380,109 +380,259 @@ fun EstadisticasScreen(
 
                                 Spacer(modifier = Modifier.height(8.dp))
 
-                                // Tomar SOLO el último mes con datos
-                                val lastMonth = monthlyStats
+                                // Selector de mes
+                                val monthsWithData = monthlyStats
                                     .filter { it.income > 0 || it.expenses > 0 }
-                                    .lastOrNull()
+                                    .map { "${it.month} ${it.year}" }
 
-                                if (lastMonth != null) {
-                                    // Mostrar leyenda
-                                    Row(
+                                var selectedMonth by remember { mutableStateOf(monthsWithData.lastOrNull() ?: "") }
+                                var expanded by remember { mutableStateOf(false) }
+
+                                if (monthsWithData.isNotEmpty()) {
+                                    // Botón selector de mes
+                                    OutlinedButton(
+                                        onClick = { expanded = true },
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.End,
-                                        verticalAlignment = Alignment.CenterVertically
+                                        shape = RoundedCornerShape(12.dp)
                                     ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(12.dp)
-                                                    .background(Color(0xFF10B981), CircleShape)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = if (selectedMonth.isNotEmpty()) "📅 $selectedMonth" else "Selecciona un mes",
+                                                fontSize = 14.sp
                                             )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Ingresos", fontSize = 11.sp, color = Color.Gray)
+                                            Icon(
+                                                imageVector = Icons.Default.ArrowDropDown,
+                                                contentDescription = "Seleccionar mes",
+                                                tint = Color.Gray
+                                            )
                                         }
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(12.dp)
-                                                    .background(Color(0xFFEF4444), CircleShape)
+                                    }
+
+                                    // Dropdown de meses
+                                    DropdownMenu(
+                                        expanded = expanded,
+                                        onDismissRequest = { expanded = false }
+                                    ) {
+                                        monthsWithData.forEach { month ->
+                                            DropdownMenuItem(
+                                                text = { Text(month) },
+                                                onClick = {
+                                                    selectedMonth = month
+                                                    expanded = false
+                                                }
                                             )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Gastos", fontSize = 11.sp, color = Color.Gray)
                                         }
                                     }
 
                                     Spacer(modifier = Modifier.height(12.dp))
 
-                                    // Gráfico de barras para un solo mes
-                                    AndroidView(
-                                        factory = { context ->
-                                            BarChart(context).apply {
-                                                description.isEnabled = false
-                                                setDrawGridBackground(false)
-                                                setDrawBarShadow(false)
-                                                setDrawValueAboveBar(true)
-                                                setPinchZoom(false)
-                                                setScaleEnabled(false)
+                                    // Obtener el mes seleccionado
+                                    val selectedMonthData = monthlyStats.firstOrNull {
+                                        "${it.month} ${it.year}" == selectedMonth
+                                    }
 
-                                                xAxis.apply {
-                                                    position = XAxis.XAxisPosition.BOTTOM
-                                                    setDrawGridLines(false)
-                                                    granularity = 1f
-                                                    setDrawLabels(true)
-                                                    axisMinimum = -0.5f
-                                                    axisMaximum = 1.5f
-                                                    // Etiquetas para las dos barras
-                                                    valueFormatter = IndexAxisValueFormatter(
-                                                        listOf("Ingresos", "Gastos")
-                                                    )
-                                                }
-
-                                                axisLeft.apply {
-                                                    setDrawGridLines(true)
-                                                    axisMinimum = 0f
-                                                    val maxValue = maxOf(lastMonth.income, lastMonth.expenses)
-                                                    axisMaximum = (maxValue * 1.2f).toFloat()
-
-                                                    valueFormatter = object : ValueFormatter() {
-                                                        override fun getFormattedValue(value: Float): String {
-                                                            return if (value >= 1000) "${(value / 1000).toInt()}k"
-                                                            else value.toInt().toString()
-                                                        }
-                                                    }
-                                                }
-
-                                                axisRight.isEnabled = false
-                                                legend.isEnabled = false
-
-                                                // Crear dos barras separadas
-                                                val entries = ArrayList<BarEntry>()
-                                                entries.add(BarEntry(0f, lastMonth.income.toFloat()))  // Ingresos en posición 0
-                                                entries.add(BarEntry(1f, lastMonth.expenses.toFloat())) // Gastos en posición 1
-
-                                                val dataSet = BarDataSet(entries, "").apply {
-                                                    colors = listOf(
-                                                        Color(0xFF10B981).toArgb(),  // Ingresos: verde
-                                                        Color(0xFFEF4444).toArgb()   // Gastos: rojo
-                                                    )
-                                                    valueTextSize = 14f
-                                                    valueTextColor = Color.Black.toArgb()
-                                                    setDrawValues(true)
-                                                }
-
-                                                val barData = BarData(dataSet)
-                                                barData.barWidth = 0.5f
-                                                data = barData
-
-                                                animateY(1000)
-                                                invalidate()
+                                    if (selectedMonthData != null) {
+                                        // Mostrar leyenda
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.End,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(12.dp)
+                                                        .background(Color(0xFF10B981), CircleShape)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Ingresos", fontSize = 11.sp, color = Color.Gray)
                                             }
-                                        },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(280.dp)
-                                    )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(12.dp)
+                                                        .background(Color(0xFFEF4444), CircleShape)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Gastos", fontSize = 11.sp, color = Color.Gray)
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(12.dp))
+
+                                        // CORREGIDO: Usar key para forzar recomposición del gráfico
+                                        key(selectedMonth) {
+                                            AndroidView(
+                                                factory = { context ->
+                                                    BarChart(context).apply {
+                                                        description.isEnabled = false
+                                                        setDrawGridBackground(false)
+                                                        setDrawBarShadow(false)
+                                                        setDrawValueAboveBar(true)
+                                                        setPinchZoom(false)
+                                                        setScaleEnabled(false)
+
+                                                        xAxis.apply {
+                                                            position = XAxis.XAxisPosition.BOTTOM
+                                                            setDrawGridLines(false)
+                                                            granularity = 1f
+                                                            setDrawLabels(true)
+                                                            axisMinimum = -0.5f
+                                                            axisMaximum = 1.5f
+                                                            valueFormatter = IndexAxisValueFormatter(
+                                                                listOf("Ingresos", "Gastos")
+                                                            )
+                                                        }
+
+                                                        axisLeft.apply {
+                                                            setDrawGridLines(true)
+                                                            axisMinimum = 0f
+                                                            val maxValue = maxOf(selectedMonthData.income, selectedMonthData.expenses)
+                                                            axisMaximum = if (maxValue > 0) (maxValue * 1.2f).toFloat() else 100f
+
+                                                            valueFormatter = object : ValueFormatter() {
+                                                                override fun getFormattedValue(value: Float): String {
+                                                                    return if (value >= 1000) "${(value / 1000).toInt()}k"
+                                                                    else value.toInt().toString()
+                                                                }
+                                                            }
+                                                        }
+
+                                                        axisRight.isEnabled = false
+                                                        legend.isEnabled = false
+
+                                                        val entries = ArrayList<BarEntry>()
+                                                        entries.add(BarEntry(0f, selectedMonthData.income.toFloat()))
+                                                        entries.add(BarEntry(1f, selectedMonthData.expenses.toFloat()))
+
+                                                        val dataSet = BarDataSet(entries, "").apply {
+                                                            colors = listOf(
+                                                                Color(0xFF10B981).toArgb(),
+                                                                Color(0xFFEF4444).toArgb()
+                                                            )
+                                                            valueTextSize = 14f
+                                                            valueTextColor = Color.Black.toArgb()
+                                                            setDrawValues(true)
+                                                        }
+
+                                                        val barData = BarData(dataSet)
+                                                        barData.barWidth = 0.5f
+                                                        data = barData
+
+                                                        animateY(1000)
+                                                        invalidate()
+                                                    }
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(280.dp),
+                                                update = { chart ->
+                                                    // CORREGIDO: Actualizar el gráfico cuando cambian los datos
+                                                    chart.data?.clearValues()
+
+                                                    val entries = ArrayList<BarEntry>()
+                                                    entries.add(BarEntry(0f, selectedMonthData.income.toFloat()))
+                                                    entries.add(BarEntry(1f, selectedMonthData.expenses.toFloat()))
+
+                                                    val dataSet = BarDataSet(entries, "").apply {
+                                                        colors = listOf(
+                                                            Color(0xFF10B981).toArgb(),
+                                                            Color(0xFFEF4444).toArgb()
+                                                        )
+                                                        valueTextSize = 14f
+                                                        valueTextColor = Color.Black.toArgb()
+                                                        setDrawValues(true)
+                                                    }
+
+                                                    val barData = BarData(dataSet)
+                                                    barData.barWidth = 0.5f
+                                                    chart.data = barData
+
+                                                    // Actualizar el eje Y
+                                                    val maxValue = maxOf(selectedMonthData.income, selectedMonthData.expenses)
+                                                    chart.axisLeft.axisMaximum = if (maxValue > 0) (maxValue * 1.2f).toFloat() else 100f
+
+                                                    chart.animateY(500)
+                                                    chart.invalidate()
+                                                }
+                                            )
+                                        }
+
+                                        // Mostrar valores numéricos adicionales
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceEvenly
+                                        ) {
+                                            // Total ingresos
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text("Total Ingresos", fontSize = 11.sp, color = Color.Gray)
+                                                Text(
+                                                    text = "$${currencyFormatter.format(selectedMonthData.income)}",
+                                                    fontSize = 16.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF16A34A)
+                                                )
+                                            }
+
+                                            // Separador
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(1.dp)
+                                                    .height(30.dp)
+                                                    .background(Color.LightGray)
+                                            )
+
+                                            // Total gastos
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text("Total Gastos", fontSize = 11.sp, color = Color.Gray)
+                                                Text(
+                                                    text = "$${currencyFormatter.format(selectedMonthData.expenses)}",
+                                                    fontSize = 16.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFFDC2626)
+                                                )
+                                            }
+
+                                            // Separador
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(1.dp)
+                                                    .height(30.dp)
+                                                    .background(Color.LightGray)
+                                            )
+
+                                            // Balance
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text("Balance", fontSize = 11.sp, color = Color.Gray)
+                                                val balance = selectedMonthData.income - selectedMonthData.expenses
+                                                Text(
+                                                    text = "$${currencyFormatter.format(balance)}",
+                                                    fontSize = 16.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (balance >= 0) Color(0xFF16A34A) else Color(0xFFDC2626)
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(200.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "Selecciona un mes para ver los datos",
+                                                fontSize = 14.sp,
+                                                color = Color.Gray
+                                            )
+                                        }
+                                    }
                                 } else {
                                     // Mensaje cuando no hay datos
                                     Box(
