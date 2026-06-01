@@ -48,6 +48,7 @@ fun HistorialScreen(
     var transactionType by remember { mutableStateOf("income") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showErrorDialog by remember { mutableStateOf(false) }
+    var selectedTransaction by remember { mutableStateOf<FirestoreTransaction?>(null) }
 
     val categories = listOf(
         "Todas las categorías",
@@ -90,8 +91,11 @@ fun HistorialScreen(
         .filter { it.type == "income" }
         .sumOf { it.amount }
     val totalExpense = transactions
-        .filter { it.type == "expense" }
+        .filter { it.type == "expense" && it.paymentMethod != "Tarjeta de Crédito" }
+        .sumOf { it.amount } + transactions
+        .filter { it.type == "transfer" && it.paymentMethod == "Transferencia" }
         .sumOf { it.amount }
+
     val totalBalance = totalIncome - totalExpense
 
     val currencyFormatter = remember {
@@ -424,6 +428,9 @@ fun HistorialScreen(
                                                 showErrorDialog = true
                                             }
                                         }
+                                    },
+                                    onClick = {
+                                        selectedTransaction = transaction
                                     }
                                 )
                                 if (transaction != filteredTransactions.last()) {
@@ -435,10 +442,110 @@ fun HistorialScreen(
                                 }
                             }
                         }
+                        // Diálogo de detalles de transacción
+                        if (selectedTransaction != null) {
+                            Dialog(
+                                onDismissRequest = { selectedTransaction = null }
+                            ) {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(20.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Text(
+                                            text = "Detalles de la transacción",
+                                            fontSize = 20.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+
+                                        HorizontalDivider()
+
+                                        // Información detallada
+                                        DetailRow("Concepto", selectedTransaction!!.name)
+                                        DetailRow("Categoría", selectedTransaction!!.category)
+                                        DetailRow(
+                                            "Monto",
+                                            "$${currencyFormatter.format(selectedTransaction!!.amount)}"
+                                        )
+                                        DetailRow("Tipo", if (selectedTransaction!!.type == "income") "Ingreso" else "Gasto")
+                                        DetailRow("Método de pago", selectedTransaction!!.paymentMethod.ifEmpty { "N/A" })
+                                        DetailRow("Fecha", dateFormatter.format(selectedTransaction!!.date))
+
+                                        if (selectedTransaction!!.description.isNotBlank()) {
+                                            DetailRow("Descripción", selectedTransaction!!.description)
+                                        }
+
+                                        // Información específica de TC
+                                        if (selectedTransaction!!.paymentMethod == "Tarjeta de Crédito") {
+                                            HorizontalDivider()
+                                            DetailRow(
+                                                "Plazo",
+                                                if (selectedTransaction!!.creditInstallments == 1) "Contado"
+                                                else "${selectedTransaction!!.creditInstallments} meses"
+                                            )
+                                            DetailRow(
+                                                "Mensualidad",
+                                                "$${currencyFormatter.format(selectedTransaction!!.amount / selectedTransaction!!.creditInstallments)}"
+                                            )
+                                            DetailRow(
+                                                "Pagado",
+                                                "$${currencyFormatter.format(selectedTransaction!!.creditPaidSoFar)}"
+                                            )
+                                            DetailRow(
+                                                "Restante",
+                                                "$${currencyFormatter.format(selectedTransaction!!.amount - selectedTransaction!!.creditPaidSoFar)}"
+                                            )
+
+                                            val porcentaje = ((selectedTransaction!!.creditPaidSoFar / selectedTransaction!!.amount) * 100).toInt()
+                                            DetailRow("Progreso", "$porcentaje%")
+                                        }
+
+                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                        Button(
+                                            onClick = { selectedTransaction = null },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = Color(0xFF3B82F6)
+                                            )
+                                        ) {
+                                            Text("Cerrar")
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun DetailRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            color = Color.Gray,
+            fontWeight = FontWeight.Medium
+        )
+        Text(
+            text = value,
+            fontSize = 14.sp,
+            color = Color.Black,
+            fontWeight = FontWeight.Normal
+        )
     }
 }
 
@@ -448,9 +555,28 @@ fun TransactionItem(
     transaction: FirestoreTransaction,
     currencyFormatter: NumberFormat,
     dateFormatter: SimpleDateFormat,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onClick: () -> Unit  // NUEVO: para abrir detalles
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
+
+    // Determinar si es TC o pago de TC
+    val esTC = transaction.paymentMethod == "Tarjeta de Crédito"
+    val esPagoTC = transaction.type == "transfer" && transaction.paymentMethod == "Transferencia"
+
+    // Calcular texto del monto
+    val montoTexto = when {
+        transaction.type == "income" -> "+$${currencyFormatter.format(transaction.amount)}"
+        esPagoTC -> "-$${currencyFormatter.format(transaction.amount)}"
+        esTC -> "$${currencyFormatter.format(transaction.amount)}"
+        else -> "-$${currencyFormatter.format(transaction.amount)}"
+    }
+
+    val montoColor = when {
+        transaction.type == "income" -> Color(0xFF16A34A)
+        esTC -> Color(0xFF3B82F6)
+        else -> Color(0xFFDC2626)
+    }
 
     if (showDeleteDialog) {
         AlertDialog(
@@ -480,82 +606,127 @@ fun TransactionItem(
         )
     }
 
-    Row(
+    // Item principal con click para detalles y long press para eliminar
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { showDeleteDialog = true }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                modifier = Modifier.size(40.dp),
-                shape = RoundedCornerShape(20.dp),
-                color = if (transaction.type == "income")
-                    Color(0xFF16A34A).copy(alpha = 0.1f)
-                else
-                    Color(0xFFDC2626).copy(alpha = 0.1f)
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = if (transaction.type == "income")
-                            Icons.Default.ArrowUpward
-                        else
-                            Icons.Default.ArrowDownward,
-                        contentDescription = null,
-                        tint = if (transaction.type == "income")
-                            Color(0xFF16A34A)
-                        else
-                            Color(0xFFDC2626),
-                        modifier = Modifier.size(20.dp)
-                    )
+                Surface(
+                    modifier = Modifier.size(40.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    color = montoColor.copy(alpha = 0.1f)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = when {
+                                transaction.type == "income" -> Icons.Default.ArrowUpward
+                                esPagoTC -> Icons.Default.Payment
+                                esTC -> Icons.Default.CreditCard
+                                else -> Icons.Default.ArrowDownward
+                            },
+                            contentDescription = null,
+                            tint = montoColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
-            Column {
-                Text(
-                    text = transaction.name,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 16.sp,
-                    color = Color.Black
-                )
-                Text(
-                    text = transaction.category,
-                    fontSize = 13.sp,
-                    color = Color.Gray
-                )
-                Text(
-                    text = dateFormatter.format(transaction.date),
-                    fontSize = 11.sp,
-                    color = Color.Gray,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-                if (transaction.description.isNotBlank()) {
+                Column {
+                    // Nombre con indicador de MSI
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (esPagoTC) "Pago Tarjeta" else transaction.name,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 16.sp,
+                            color = Color.Black
+                        )
+                        if (esTC && transaction.creditInstallments > 1) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "(${transaction.creditInstallments} MSI)",
+                                fontSize = 11.sp,
+                                color = Color(0xFF3B82F6),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
                     Text(
-                        text = transaction.description,
+                        text = if (esPagoTC) transaction.description else transaction.category,
+                        fontSize = 13.sp,
+                        color = Color.Gray
+                    )
+                    Text(
+                        text = dateFormatter.format(transaction.date),
                         fontSize = 11.sp,
                         color = Color.Gray,
                         modifier = Modifier.padding(top = 2.dp)
                     )
+
+                    // Información adicional para TC
+                    if (esTC && transaction.creditInstallments > 1) {
+                        val pagado = transaction.creditPaidSoFar
+                        val total = transaction.amount
+                        val porcentaje = ((pagado / total) * 100).toInt()
+
+                        LinearProgressIndicator(
+                            progress = (pagado / total).toFloat(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            color = Color(0xFF3B82F6),
+                            trackColor = Color(0xFFE5E7EB)
+                        )
+                        Text(
+                            text = "Pagado: $porcentaje% ($${currencyFormatter.format(pagado)} de $${currencyFormatter.format(total)})",
+                            fontSize = 10.sp,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
                 }
             }
+
+            Text(
+                text = montoTexto,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp,
+                color = montoColor
+            )
         }
 
-        Text(
-            text = if (transaction.type == "income")
-                "+$${currencyFormatter.format(transaction.amount)}"
-            else
-                "-$${currencyFormatter.format(transaction.amount)}",
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 16.sp,
-            color = if (transaction.type == "income") Color(0xFF16A34A) else Color(0xFFDC2626)
-        )
+        // Botón de eliminar (icono pequeño al final)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(
+                onClick = { showDeleteDialog = true },
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = Color(0xFFDC2626)
+                )
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Eliminar",
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Eliminar", fontSize = 12.sp)
+            }
+        }
     }
 }
 

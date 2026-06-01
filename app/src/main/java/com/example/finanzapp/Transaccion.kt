@@ -358,6 +358,65 @@ fun AgregarTransaccionScreen(
                 }
             }
 
+            // 3.5 MESES PARA TARJETA DE CRÉDITO (solo si se seleccionó TC)
+            var selectedInstallments by remember { mutableStateOf(1) }
+            var showInstallmentsError by remember { mutableStateOf(false) }
+
+            if (selectedType == "expense" && selectedPaymentMethod == "Tarjeta de Crédito") {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "¿A cuántos meses?",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.Gray
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Botones rápidos para meses comunes
+                    listOf(1, 3, 6, 12).forEach { months ->
+                        FilterChip(
+                            selected = selectedInstallments == months,
+                            onClick = {
+                                selectedInstallments = months
+                                showInstallmentsError = false
+                            },
+                            label = {
+                                Text(if (months == 1) "Contado" else "$months meses")
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Para meses personalizados
+                OutlinedTextField(
+                    value = if (selectedInstallments > 12) selectedInstallments.toString() else "",
+                    onValueChange = {
+                        val value = it.toIntOrNull()
+                        if (value != null && value in 1..36) {
+                            selectedInstallments = value
+                            showInstallmentsError = false
+                        } else if (it.isEmpty()) {
+                            selectedInstallments = 1
+                        } else {
+                            showInstallmentsError = true
+                        }
+                    },
+                    placeholder = { Text("Otros meses (1-36)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = showInstallmentsError,
+                    supportingText = {
+                        if (showInstallmentsError) {
+                            Text("Ingresa un número entre 1 y 36")
+                        }
+                    }
+                )
+            }
 
 
             // 4. CATEGORÍA
@@ -487,7 +546,8 @@ fun AgregarTransaccionScreen(
                                 amount = amount.toDouble(),
                                 paymentMethod = if (selectedType == "expense") selectedPaymentMethod else "",
                                 category = selectedCategory,
-                                description = description
+                                description = description,
+                                creditInstallments = if (selectedPaymentMethod == "Tarjeta de Crédito") selectedInstallments else 1 // NUEVO
                             )
 
                             isLoading = false

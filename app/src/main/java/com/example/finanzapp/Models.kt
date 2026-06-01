@@ -12,7 +12,12 @@ data class FirestoreTransaction(
     val type: String = "", // "income" o "expense"
     val description: String = "",
     val paymentMethod: String = "",
-    val userId: String = ""
+    val userId: String = "",
+
+    // NUEVOS CAMPOS PARA TARJETA DE CRÉDITO
+    val creditInstallments: Int = 1, // 1 = contado, 2,3,4... meses
+    val creditPaidSoFar: Double = 0.0, // Cuánto has pagado ya
+    val originalAmount: Double = 0.0 // Monto original (útil si haces pagos parciales)
 )
 
 // Modelo para estadísticas por categoría

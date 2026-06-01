@@ -62,12 +62,24 @@ class TransactionRepository {
     }
 
     // Obtener estadísticas por categoría
+    // Modifica esta función para excluir compras a crédito de los gastos reales
+    // En TransactionRepository.kt - getCategoryStats()
     suspend fun getCategoryStats(): List<CategoryStats> {
         val transactions = getAllTransactions()
 
         return transactions
-            .filter { it.type == "expense" }
-            .groupBy { it.category }
+            .filter {
+                // Gastos reales: gastos normales (excluyendo TC) + pagos de TC
+                (it.type == "expense" && it.paymentMethod != "Tarjeta de Crédito") ||
+                        (it.type == "transfer" && it.paymentMethod == "Transferencia")
+            }
+            .groupBy {
+                // Para pagos de TC, usar categoría "Pagos Tarjeta"
+                if (it.type == "transfer" && it.paymentMethod == "Transferencia")
+                    "Pagos Tarjeta"
+                else
+                    it.category
+            }
             .map { (category, transList) ->
                 CategoryStats(
                     name = category,
@@ -111,14 +123,26 @@ class TransactionRepository {
 
             if (index != -1) {
                 val monthStat = mutableMonths[index]
-                if (transaction.type == "income") {
-                    mutableMonths[index] = monthStat.copy(
-                        income = monthStat.income + transaction.amount
-                    )
-                } else {
-                    mutableMonths[index] = monthStat.copy(
-                        expenses = monthStat.expenses + transaction.amount
-                    )
+                when {
+                    // INGRESOS
+                    transaction.type == "income" -> {
+                        mutableMonths[index] = monthStat.copy(
+                            income = monthStat.income + transaction.amount
+                        )
+                    }
+                    // GASTOS REALES (excluyendo compras TC)
+                    transaction.type == "expense" && transaction.paymentMethod != "Tarjeta de Crédito" -> {
+                        mutableMonths[index] = monthStat.copy(
+                            expenses = monthStat.expenses + transaction.amount
+                        )
+                    }
+                    // PAGOS DE TARJETA (también son gastos reales)
+                    transaction.type == "transfer" && transaction.paymentMethod == "Transferencia" -> {
+                        mutableMonths[index] = monthStat.copy(
+                            expenses = monthStat.expenses + transaction.amount
+                        )
+                    }
+                    // Compras con TC NO se suman a gastos
                 }
             }
         }

@@ -87,9 +87,30 @@ fun PantallaPrincipal(
     val userName = user?.displayName?.split(" ")?.firstOrNull() ?: "Usuario"
 
     // Calcular totales
+    // Con este nuevo código:
     val totalIncome = transactions.filter { it.type == "income" }.sumOf { it.amount }
-    val totalExpense = transactions.filter { it.type == "expense" }.sumOf { it.amount }
-    val totalBalance = totalIncome - totalExpense
+
+// GASTOS REALES (los que ya salieron de tu cuenta)
+    val realExpenses = transactions.filter {
+        it.type == "expense" &&
+                it.paymentMethod != "Tarjeta de Crédito"  // Solo efectivo y débito
+    }.sumOf { it.amount }
+
+// Pagos que ya hiciste de la tarjeta de crédito
+    val creditCardTransfers = transactions.filter {
+        it.type == "transfer" && it.paymentMethod == "Transferencia"
+    }.sumOf { it.amount }
+
+    val totalRealExpense = realExpenses + creditCardTransfers
+    val totalBalance = totalIncome - totalRealExpense  // ✅ Balance REAL
+
+// Para estadísticas (muestra el gasto completo aunque sea a crédito)
+    val totalExpenseForStats = transactions.filter { it.type == "expense" }.sumOf { it.amount }
+
+    val totalCreditDebt = transactions.filter {
+        it.type == "expense" &&
+                it.paymentMethod == "Tarjeta de Crédito"
+    }.sumOf { it.amount - it.creditPaidSoFar }
 
     val currencyFormatter = remember { NumberFormat.getNumberInstance(Locale("es", "MX")) }
     val dateFormatter = remember { SimpleDateFormat("dd MMM", Locale("es", "MX")) }
@@ -108,8 +129,10 @@ fun PantallaPrincipal(
                 Balance(
                     totalBalance = totalBalance,
                     totalIncome = totalIncome,
-                    totalExpense = totalExpense,
-                    currencyFormatter = currencyFormatter
+                    totalExpense = totalRealExpense,
+                    currencyFormatter = currencyFormatter,
+                    totalCreditDebt = totalCreditDebt,
+                    transactions = transactions
                 )
             }
 
@@ -117,17 +140,31 @@ fun PantallaPrincipal(
             item {
                 Row(
                     horizontalArrangement = Arrangement.SpaceAround,
-                    modifier = Modifier.fillMaxWidth().padding(15.dp)
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp, start=2.dp, bottom=2.dp)
                 ) {
                     Botones("Agregar", painterResource(R.drawable.mdi), Color(0xFF00A63E)) {
                         navController.navigate("AgregarTransaccion")
                     }
-                    Botones("Historial", painterResource(R.drawable.fluent__history_32_filled), Color.Blue) {
+                    Botones(
+                        "Historial",
+                        painterResource(R.drawable.fluent__history_32_filled),
+                        Color.Blue
+                    ) {
                         navController.navigate("Historial")
                     }
+                }
+                Row(
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp, end= 2.dp, bottom=2.dp)
+                ) {
                     Botones("Estadisticas", painterResource(R.drawable.lucide__chart_column), Color.Magenta) {
                         navController.navigate("Estadisticas")
                     }
+                    Botones("Pagar TC",painterResource(R.drawable.lucide__credit_card), Color(0xFF3B82F6)
+                    ) {
+                        navController.navigate("PagarTC")
+                    }
+
                 }
             }
 
@@ -154,15 +191,40 @@ fun PantallaPrincipal(
                             // Mostrar transacciones si hay
                             recentTransactions.isNotEmpty() -> {
                                 recentTransactions.forEach { transaction ->
-                                    ItemTransaccion(
-                                        categoria = transaction.name,
-                                        descripcion = transaction.category,
-                                        monto = if (transaction.type == "income")
+                                    // Determinar si es tarjeta de crédito
+                                    val esTC = transaction.paymentMethod == "Tarjeta de Crédito"
+                                    val esTransferenciaTC = transaction.type == "transfer" && transaction.paymentMethod == "Transferencia"
+                                    val esPagoTC = esTransferenciaTC  // Para mayor claridad
+
+                                    // Para transferencias de pago de TC, no mostrar signo
+                                    val montoTexto = when {
+                                        transaction.type == "income" -> {
                                             "+$${currencyFormatter.format(transaction.amount)}"
-                                        else
-                                            "-$${currencyFormatter.format(transaction.amount)}",
+                                        }
+                                        esPagoTC -> {
+                                            "-$${currencyFormatter.format(transaction.amount)}"  // ← Con signo -
+                                        }
+                                        esTC -> {
+                                            "$${currencyFormatter.format(transaction.amount)}"  // ← Sin signo, solo el monto
+                                        }
+                                        else -> {
+                                            "-$${currencyFormatter.format(transaction.amount)}"  // Gastos normales con -
+                                        }
+                                    }
+
+                                    // Para transacciones de TC, mostrar información adicional
+                                    val mostrarInfoTC = esTC && transaction.creditInstallments > 1
+
+                                    ItemTransaccion(
+                                        categoria = if (esTransferenciaTC) "Pago Tarjeta" else transaction.name,
+                                        descripcion = if (esTransferenciaTC) transaction.description else transaction.category,
+                                        monto = montoTexto,
                                         fecha = dateFormatter.format(transaction.date),
-                                        ingreso = transaction.type == "income"
+                                        ingreso = transaction.type == "income",
+                                        esTarjetaCredito = esTC,
+                                        meses = if (esTC) transaction.creditInstallments else 1,
+                                        pagado = if (esTC) transaction.creditPaidSoFar else 0.0,
+                                        total = if (esTC) transaction.amount else 0.0
                                     )
                                 }
                             }
@@ -272,7 +334,9 @@ fun Balance(
     totalBalance: Double,
     totalIncome: Double,
     totalExpense: Double,
-    currencyFormatter: NumberFormat
+    currencyFormatter: NumberFormat,
+    totalCreditDebt: Double,
+    transactions: List<FirestoreTransaction>
 ) {
     Surface(
         modifier = Modifier
@@ -309,6 +373,19 @@ fun Balance(
                     fontWeight = FontWeight.Bold,
                     fontSize = 28.sp
                 )
+                if (totalCreditDebt > 0) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Deuda TC: $${currencyFormatter.format(totalCreditDebt)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.9f)
+                    )
+                    Text(
+                        "Próximo pago: $${"%.2f".format(calculateNextPayment(transactions))}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                }
                 Row(
                     horizontalArrangement = Arrangement.SpaceAround,
                     modifier = Modifier.fillMaxWidth()
@@ -367,7 +444,7 @@ fun Botones(
         colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
         modifier = Modifier
             .height(85.dp)
-            .width(115.dp)
+            .width(165.dp)
             .border(2.dp, Color(0xFFE0E0E0), RoundedCornerShape(8.dp))
             .shadow(8.dp, shape = RoundedCornerShape(18.dp)),
         shape = RoundedCornerShape(16.dp)
@@ -396,30 +473,82 @@ fun Botones(
     }
 }
 
+
 @Composable
 fun ItemTransaccion(
     categoria: String,
     descripcion: String,
     monto: String,
     fecha: String,
-    ingreso: Boolean
+    ingreso: Boolean,
+    esTarjetaCredito: Boolean = false,  // NUEVO
+    meses: Int = 1,  // NUEVO
+    pagado: Double = 0.0,  // NUEVO
+    total: Double = 0.0  // NUEVO
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(horizontalAlignment = Alignment.Start) {
-            Text(categoria, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+            // Mostrar categoría con indicador de MSI si aplica
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(categoria, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                if (esTarjetaCredito && meses > 1) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "($meses MSI)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF3B82F6),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
             Text(descripcion, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+
+            // Mostrar progreso de pago para TC
+            if (esTarjetaCredito && meses > 1 && pagado < total) {
+                val porcentaje = (pagado / total * 100).toInt()
+                Text(
+                    "Pagado: $porcentaje% • ${(total - pagado).toInt()} restante",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF6B7280),
+                    fontSize = 10.sp
+                )
+            }
         }
+
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 monto,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
-                color = if (ingreso) Color.Green else Color.Red
+                color = when {
+                    esTarjetaCredito -> Color(0xFF3B82F6)  // Color azul para TC
+                    ingreso -> Color.Green
+                    else -> Color.Red
+                }
             )
             Text(fecha, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
         }
     }
+}
+
+
+// Agrega esta función auxiliar en PantallaPrincipal (fuera del @Composable)
+fun calculateNextPayment(transactions: List<FirestoreTransaction>): Double {
+    val creditTransactions = transactions.filter {
+        it.type == "expense" &&
+                it.paymentMethod == "Tarjeta de Crédito" &&
+                it.creditPaidSoFar < it.amount
+    }
+
+    var nextPayment = 0.0
+    creditTransactions.forEach { transaction ->
+        val remaining = transaction.amount - transaction.creditPaidSoFar
+        val monthlyPayment = transaction.amount / transaction.creditInstallments
+        nextPayment += minOf(monthlyPayment, remaining)
+    }
+
+    return nextPayment
 }

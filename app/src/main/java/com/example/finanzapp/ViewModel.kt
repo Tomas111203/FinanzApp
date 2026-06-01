@@ -3,10 +3,12 @@ package com.example.finanzapp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.util.Date
 import java.util.UUID
 
@@ -57,13 +59,15 @@ class TransactionViewModel : ViewModel() {
         amount: Double,
         paymentMethod: String,
         category: String,
-        description: String
+        description: String,
+        creditInstallments: Int = 1
     ): Result<String> {
         println("[ViewModel] Intentando guardar transacción...")
         println("   - Tipo: $type")
         println("   - Monto: $amount")
         println("   - Categoría: $category")
         println("   - Método de pago: $paymentMethod")
+        println("   - Meses: $creditInstallments") // NUEVO
 
         val auth = FirebaseAuth.getInstance()
         val currentUser = auth.currentUser
@@ -84,7 +88,11 @@ class TransactionViewModel : ViewModel() {
             type = type,
             description = description,
             paymentMethod = paymentMethod,
-            userId = currentUser.uid
+            userId = currentUser.uid,
+                    // NUEVOS CAMPOS
+            creditInstallments = creditInstallments,
+            creditPaidSoFar = 0.0,
+            originalAmount = if (paymentMethod == "Tarjeta de Crédito") amount else 0.0
         )
 
         println("[ViewModel] Transacción a guardar: ${transaction}")
@@ -101,4 +109,55 @@ class TransactionViewModel : ViewModel() {
 
         return result
     }
+
+    suspend fun registerCreditCardPayment(transactionId: String, amount: Double): Result<Unit> {
+        return try {
+            val transactions = _transactions.value
+            val transaction = transactions.find { it.id == transactionId }
+
+            if (transaction != null) {
+                val newPaidSoFar = transaction.creditPaidSoFar + amount
+
+                // 1. Actualizar la deuda en la transacción original
+                val db = FirebaseFirestore.getInstance()
+                db.collection("transactions")
+                    .document(transactionId)
+                    .update(
+                        mapOf(
+                            "creditPaidSoFar" to newPaidSoFar
+                        )
+                    )
+                    .await()
+
+                // 2. REGISTRAR COMO TRANSFERENCIA (NO como gasto)
+                // Esto es crucial: el pago reduce tu saldo bancario pero NO es un gasto nuevo
+                val paymentTransfer = FirestoreTransaction(
+                    id = UUID.randomUUID().toString(),
+                    name = "Pago Tarjeta",
+                    amount = amount,
+                    category = "Transferencia",  // ← Nueva categoría especial
+                    date = Date(),
+                    type = "transfer",  // ← NUEVO tipo "transfer" en lugar de "expense"
+                    description = "Pago de tarjeta: ${transaction.category}",
+                    paymentMethod = "Transferencia",
+                    userId = FirebaseAuth.getInstance().currentUser?.uid ?: "",
+                    creditInstallments = 1,
+                    creditPaidSoFar = amount,
+                    originalAmount = amount
+                )
+
+                repository.addTransaction(paymentTransfer)
+
+                // 3. Recargar datos
+                loadTransactions()
+
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("Transacción no encontrada"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
 }

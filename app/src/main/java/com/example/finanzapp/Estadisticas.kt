@@ -46,12 +46,14 @@ fun EstadisticasScreen(
     // Estados para datos
     var categoryStats by remember { mutableStateOf<List<CategoryStats>>(emptyList()) }
     var monthlyStats by remember { mutableStateOf<List<MonthlyStats>>(emptyList()) }
+    var allTransactions by remember { mutableStateOf<List<FirestoreTransaction>>(emptyList()) }  // ← NUEVO
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     // Cargar datos al iniciar
     LaunchedEffect(Unit) {
         try {
+            allTransactions = repository.getAllTransactions()  // ← NUEVO: cargar transacciones
             categoryStats = repository.getCategoryStats()
             monthlyStats = repository.getMonthlyStats()
         } catch (e: Exception) {
@@ -72,12 +74,25 @@ fun EstadisticasScreen(
         Color(0xFF06B6D4), Color(0xFF84CC16)
     )
 
-    // Calcular totales
+    // Calcular totales (usando los datos ya cargados)
     val totalExpenses = categoryStats.sumOf { it.totalAmount }
     val totalIncome = monthlyStats.sumOf { it.income }
     val savings = totalIncome - totalExpenses
     val expensePercentage = if (totalIncome > 0) (totalExpenses / totalIncome) * 100 else 0.0
     val mostSpentCategory = categoryStats.maxByOrNull { it.totalAmount }
+
+    // Calcular gastos reales para insights (excluyendo TC y mostrando info correcta)
+    val realExpenses = allTransactions
+        .filter {
+            it.type == "expense" &&
+                    it.paymentMethod != "Tarjeta de Crédito"
+        }
+        .sumOf { it.amount } + allTransactions
+        .filter {
+            it.type == "transfer" &&
+                    it.paymentMethod == "Transferencia"
+        }
+        .sumOf { it.amount }
 
     Scaffold(
         topBar = {
@@ -150,6 +165,7 @@ fun EstadisticasScreen(
                                     isLoading = true
                                     errorMessage = null
                                     try {
+                                        allTransactions = repository.getAllTransactions()
                                         categoryStats = repository.getCategoryStats()
                                         monthlyStats = repository.getMonthlyStats()
                                     } catch (e: Exception) {
@@ -277,32 +293,36 @@ fun EstadisticasScreen(
 
                                                 val entries = ArrayList<PieEntry>()
                                                 categoryStats.forEachIndexed { index, stat ->
-                                                    entries.add(PieEntry(stat.totalAmount.toFloat(), stat.name))
-                                                }
-
-                                                val dataSet = PieDataSet(entries, "").apply {
-                                                    setDrawIcons(false)
-                                                    sliceSpace = 3f
-                                                    selectionShift = 5f
-                                                    colors = categoryStats.indices.map { i ->
-                                                        categoryColors[i % categoryColors.size].toArgb()
+                                                    if (stat.totalAmount > 0) {  // ← Solo mostrar categorías con gastos
+                                                        entries.add(PieEntry(stat.totalAmount.toFloat(), stat.name))
                                                     }
                                                 }
 
-                                                val pieData = PieData(dataSet).apply {
-                                                    setValueTextSize(14f)
-                                                    setValueTextColor(Color.Black.toArgb())
-                                                    setValueFormatter(object : ValueFormatter() {
-                                                        override fun getFormattedValue(value: Float): String {
-                                                            return if (value >= 5f) "${value.toInt()}%" else ""
+                                                if (entries.isNotEmpty()) {
+                                                    val dataSet = PieDataSet(entries, "").apply {
+                                                        setDrawIcons(false)
+                                                        sliceSpace = 3f
+                                                        selectionShift = 5f
+                                                        colors = entries.indices.map { i ->
+                                                            categoryColors[i % categoryColors.size].toArgb()
                                                         }
-                                                    })
-                                                }
+                                                    }
 
-                                                data = pieData
-                                                setEntryLabelColor(Color.Black.toArgb())
-                                                setEntryLabelTextSize(9f)
-                                                invalidate()
+                                                    val pieData = PieData(dataSet).apply {
+                                                        setValueTextSize(14f)
+                                                        setValueTextColor(Color.Black.toArgb())
+                                                        setValueFormatter(object : ValueFormatter() {
+                                                            override fun getFormattedValue(value: Float): String {
+                                                                return if (value >= 5f) "${value.toInt()}%" else ""
+                                                            }
+                                                        })
+                                                    }
+
+                                                    data = pieData
+                                                    setEntryLabelColor(Color.Black.toArgb())
+                                                    setEntryLabelTextSize(9f)
+                                                    invalidate()
+                                                }
                                             }
                                         },
                                         modifier = Modifier
@@ -315,19 +335,30 @@ fun EstadisticasScreen(
                                     HorizontalDivider(color = Color(0xFFE5E7EB))
 
                                     categoryStats.forEachIndexed { index, stat ->
-                                        CategoryItem(
-                                            name = stat.name,
-                                            value = stat.totalAmount,
-                                            color = categoryColors[index % categoryColors.size],
-                                            currencyFormatter = currencyFormatter
-                                        )
+                                        if (stat.totalAmount > 0) {  // ← Solo mostrar categorías con gastos
+                                            CategoryItem(
+                                                name = stat.name,
+                                                value = stat.totalAmount,
+                                                color = categoryColors[index % categoryColors.size],
+                                                currencyFormatter = currencyFormatter
+                                            )
+                                        }
                                     }
+                                } else {
+                                    Text(
+                                        text = "No hay gastos registrados",
+                                        fontSize = 14.sp,
+                                        color = Color.Gray,
+                                        modifier = Modifier.padding(vertical = 20.dp)
+                                    )
                                 }
                             }
                         }
                     }
 
+
                     // Gráfico de barras mensual
+                    // Gráfico de barras mensual - SOLO ÚLTIMO MES
                     item {
                         Card(
                             modifier = Modifier
@@ -341,15 +372,50 @@ fun EstadisticasScreen(
                                 modifier = Modifier.padding(16.dp)
                             ) {
                                 Text(
-                                    text = "Ingresos vs Gastos (últimos meses)",
+                                    text = "Ingresos vs Gastos (último mes)",
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.Black
                                 )
 
-                                Spacer(modifier = Modifier.height(16.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
 
-                                if (monthlyStats.isNotEmpty()) {
+                                // Tomar SOLO el último mes con datos
+                                val lastMonth = monthlyStats
+                                    .filter { it.income > 0 || it.expenses > 0 }
+                                    .lastOrNull()
+
+                                if (lastMonth != null) {
+                                    // Mostrar leyenda
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(12.dp)
+                                                    .background(Color(0xFF10B981), CircleShape)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Ingresos", fontSize = 11.sp, color = Color.Gray)
+                                        }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(12.dp)
+                                                    .background(Color(0xFFEF4444), CircleShape)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Gastos", fontSize = 11.sp, color = Color.Gray)
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    // Gráfico de barras para un solo mes
                                     AndroidView(
                                         factory = { context ->
                                             BarChart(context).apply {
@@ -359,21 +425,26 @@ fun EstadisticasScreen(
                                                 setDrawValueAboveBar(true)
                                                 setPinchZoom(false)
                                                 setScaleEnabled(false)
-                                                setMaxVisibleValueCount(60)
 
                                                 xAxis.apply {
                                                     position = XAxis.XAxisPosition.BOTTOM
                                                     setDrawGridLines(false)
                                                     granularity = 1f
+                                                    setDrawLabels(true)
+                                                    axisMinimum = -0.5f
+                                                    axisMaximum = 1.5f
+                                                    // Etiquetas para las dos barras
                                                     valueFormatter = IndexAxisValueFormatter(
-                                                        monthlyStats.map { it.month }
+                                                        listOf("Ingresos", "Gastos")
                                                     )
-                                                    setCenterAxisLabels(true)
                                                 }
 
                                                 axisLeft.apply {
                                                     setDrawGridLines(true)
                                                     axisMinimum = 0f
+                                                    val maxValue = maxOf(lastMonth.income, lastMonth.expenses)
+                                                    axisMaximum = (maxValue * 1.2f).toFloat()
+
                                                     valueFormatter = object : ValueFormatter() {
                                                         override fun getFormattedValue(value: Float): String {
                                                             return if (value >= 1000) "${(value / 1000).toInt()}k"
@@ -383,53 +454,64 @@ fun EstadisticasScreen(
                                                 }
 
                                                 axisRight.isEnabled = false
+                                                legend.isEnabled = false
 
-                                                legend.apply {
-                                                    verticalAlignment = com.github.mikephil.charting.components.Legend.LegendVerticalAlignment.TOP
-                                                    horizontalAlignment = com.github.mikephil.charting.components.Legend.LegendHorizontalAlignment.RIGHT
-                                                    orientation = com.github.mikephil.charting.components.Legend.LegendOrientation.HORIZONTAL
-                                                    setDrawInside(false)
-                                                }
+                                                // Crear dos barras separadas
+                                                val entries = ArrayList<BarEntry>()
+                                                entries.add(BarEntry(0f, lastMonth.income.toFloat()))  // Ingresos en posición 0
+                                                entries.add(BarEntry(1f, lastMonth.expenses.toFloat())) // Gastos en posición 1
 
-                                                val incomeEntries = ArrayList<BarEntry>()
-                                                val expenseEntries = ArrayList<BarEntry>()
-
-                                                monthlyStats.forEachIndexed { index, item ->
-                                                    incomeEntries.add(BarEntry(index.toFloat(), item.income.toFloat()))
-                                                    expenseEntries.add(BarEntry(index.toFloat(), item.expenses.toFloat()))
-                                                }
-
-                                                val incomeDataSet = BarDataSet(incomeEntries, "Ingresos").apply {
-                                                    color = Color(0xFF10B981).toArgb()
-                                                    valueTextSize = 10f
+                                                val dataSet = BarDataSet(entries, "").apply {
+                                                    colors = listOf(
+                                                        Color(0xFF10B981).toArgb(),  // Ingresos: verde
+                                                        Color(0xFFEF4444).toArgb()   // Gastos: rojo
+                                                    )
+                                                    valueTextSize = 14f
                                                     valueTextColor = Color.Black.toArgb()
+                                                    setDrawValues(true)
                                                 }
 
-                                                val expenseDataSet = BarDataSet(expenseEntries, "Gastos").apply {
-                                                    color = Color(0xFFEF4444).toArgb()
-                                                    valueTextSize = 10f
-                                                    valueTextColor = Color.Black.toArgb()
-                                                }
-
-                                                val barData = BarData(incomeDataSet, expenseDataSet)
-                                                barData.barWidth = 0.3f
+                                                val barData = BarData(dataSet)
+                                                barData.barWidth = 0.5f
                                                 data = barData
-                                                groupBars(0f, 0.4f, 0.05f)
-                                                xAxis.axisMinimum = -0.5f
-                                                xAxis.axisMaximum = monthlyStats.size.toFloat() - 0.5f
+
+                                                animateY(1000)
                                                 invalidate()
                                             }
                                         },
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(250.dp)
+                                            .height(280.dp)
                                     )
+                                } else {
+                                    // Mensaje cuando no hay datos
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(200.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.lucide__chart_column),
+                                                contentDescription = null,
+                                                tint = Color.Gray,
+                                                modifier = Modifier.size(48.dp)
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = "Agrega transacciones para ver la gráfica",
+                                                fontSize = 14.sp,
+                                                color = Color.Gray
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
 
-                    // Insights
+                    // Insights (mejorado con datos reales)
                     item {
                         Card(
                             modifier = Modifier
@@ -464,7 +546,7 @@ fun EstadisticasScreen(
                                 }
 
                                 Text(
-                                    text = "• Este mes has ahorrado " +
+                                    text = "• Has ahorrado " +
                                             "$${currencyFormatter.format(savings)}",
                                     fontSize = 14.sp,
                                     color = Color(0xFF6B21A8),
@@ -476,6 +558,24 @@ fun EstadisticasScreen(
                                         text = "• Tus gastos representan el " +
                                                 "${String.format("%.1f", expensePercentage)}% " +
                                                 "de tus ingresos",
+                                        fontSize = 14.sp,
+                                        color = Color(0xFF6B21A8),
+                                        lineHeight = 20.sp
+                                    )
+                                }
+
+                                // Insight adicional sobre deuda de TC
+                                val totalCreditDebt = allTransactions
+                                    .filter {
+                                        it.type == "expense" &&
+                                                it.paymentMethod == "Tarjeta de Crédito"
+                                    }
+                                    .sumOf { it.amount - it.creditPaidSoFar }
+
+                                if (totalCreditDebt > 0) {
+                                    Text(
+                                        text = "• Tienes una deuda de TC de " +
+                                                "$${currencyFormatter.format(totalCreditDebt)}",
                                         fontSize = 14.sp,
                                         color = Color(0xFF6B21A8),
                                         lineHeight = 20.sp

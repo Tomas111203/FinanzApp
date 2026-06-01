@@ -157,6 +157,14 @@ fun App(auth: FirebaseAuth) {
                 }
             )
         }
+
+        composable("PagarTC") {
+            PagarTCScreen(
+                viewModel = transactionViewModel,
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
     }
 }
 
