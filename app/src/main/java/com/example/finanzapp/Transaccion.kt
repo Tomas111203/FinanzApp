@@ -98,10 +98,16 @@ fun AgregarTransaccionScreen(
         }
     }
 
-    val categories = listOf(
+    val categoriesGasto = listOf(
         "Alimentación", "Transporte", "Entretenimiento",
         "Salud", "Servicios", "Educación", "Ropa", "Otros"
     )
+    val categoriesIngreso = listOf(
+        "Sueldo","Inversión","Freelance","Herencia","Regalo","Venta","Otro"
+    )
+
+    var currentCategories: List<String> = categoriesGasto  // Valor inicial por defecto
+
 
     val paymentMethods = listOf("Efectivo", "Tarjeta de Débito", "Tarjeta de Crédito")
 
@@ -272,7 +278,7 @@ fun AgregarTransaccionScreen(
                 )
             }
 
-            // 3. MÉTODO DE PAGO - SOLO PARA GASTOS
+            // 3. METODO DE PAGO - SOLO PARA GASTOS
             if (selectedType == "expense") {
                 Text(
                     text = "Método de pago",
@@ -352,6 +358,8 @@ fun AgregarTransaccionScreen(
                 }
             }
 
+
+
             // 4. CATEGORÍA
             Text(
                 text = "Categoría",
@@ -366,6 +374,11 @@ fun AgregarTransaccionScreen(
                         .fillMaxWidth()
                         .height(56.dp)
                         .clickable {
+                            currentCategories = if (selectedType == "expense") {
+                                categoriesGasto
+                            } else {
+                                categoriesIngreso
+                            }
                             println("[Transaccion] Abriendo dropdown de categorías")
                             showCategoryDropdown = true
                         }
@@ -400,7 +413,7 @@ fun AgregarTransaccionScreen(
                     },
                     modifier = Modifier.fillMaxWidth(0.9f)
                 ) {
-                    categories.forEach { category ->
+                    currentCategories.forEach { category ->
                         DropdownMenuItem(
                             text = {
                                 Text(category, fontSize = 14.sp)
