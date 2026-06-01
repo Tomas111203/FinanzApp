@@ -161,6 +161,7 @@ fun AgregarTransaccionScreen(
                     CircularProgressIndicator()
                 }
             }
+
             // 1. TIPO DE TRANSACCIÓN
             Text(
                 text = "Tipo de transacción",
@@ -213,6 +214,8 @@ fun AgregarTransaccionScreen(
                     onClick = {
                         println("[Transaccion] Seleccionado: INGRESO")
                         selectedType = "income"
+                        //  Limpiar método de pago al cambiar a ingreso
+                        selectedPaymentMethod = ""
                     },
                     label = {
                         Box(
@@ -269,13 +272,14 @@ fun AgregarTransaccionScreen(
                 )
             }
 
-            // 3. MÉTODO DE PAGO
-            Text(
-                text = "Método de pago",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.Gray
-            )
+            // 3. MÉTODO DE PAGO - SOLO PARA GASTOS
+            if (selectedType == "expense") {
+                Text(
+                    text = "Método de pago",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.Gray
+                )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -339,12 +343,13 @@ fun AgregarTransaccionScreen(
                 }
             }
 
-            if (selectedPaymentMethod.isEmpty()) {
-                Text(
-                    text = "* Selecciona un método de pago",
-                    fontSize = 11.sp,
-                    color = Color(0xFFDC2626)
-                )
+                if (selectedPaymentMethod.isEmpty()) {
+                    Text(
+                        text = "* Selecciona un método de pago",
+                        fontSize = 11.sp,
+                        color = Color(0xFFDC2626)
+                    )
+                }
             }
 
             // 4. CATEGORÍA
@@ -450,7 +455,14 @@ fun AgregarTransaccionScreen(
                     println("   Descripción: $description")
                     println("==========================================")
 
-                    if (validateForm(amount, selectedPaymentMethod, selectedCategory)) {
+                    //  Validar según el tipo de transacción
+                    val isValid = if (selectedType == "expense") {
+                        validateForm(amount, selectedPaymentMethod, selectedCategory)
+                    } else {
+                        validateIncomeForm(amount, selectedCategory)
+                    }
+
+                    if (isValid) {
                         println("[Transaccion] Formulario válido")
                         isLoading = true
                         println("[Transaccion] isLoading = true")
@@ -460,7 +472,7 @@ fun AgregarTransaccionScreen(
                             val result = viewModel.saveTransaction(
                                 type = selectedType,
                                 amount = amount.toDouble(),
-                                paymentMethod = selectedPaymentMethod,
+                                paymentMethod = if (selectedType == "expense") selectedPaymentMethod else "",
                                 category = selectedCategory,
                                 description = description
                             )
@@ -482,9 +494,6 @@ fun AgregarTransaccionScreen(
                         }
                     } else {
                         println(" [Transaccion] Formulario INVALIDO")
-                        println("   - Monto válido: ${amount.toDoubleOrNull() != null && amount.toDoubleOrNull()!! > 0}")
-                        println("   - Método pago: ${selectedPaymentMethod.isNotEmpty()}")
-                        println("   - Categoría: ${selectedCategory.isNotEmpty()}")
                         scope.launch {
                             snackbarHostState.showSnackbar("Por favor completa todos los campos obligatorios")
                         }
@@ -522,7 +531,7 @@ fun AgregarTransaccionScreen(
     }
 }
 
-// Función para validar el formulario
+// Función para validar el formulario de GASTO
 private fun validateForm(
     amount: String,
     paymentMethod: String,
@@ -533,9 +542,26 @@ private fun validateForm(
             paymentMethod.isNotEmpty() &&
             category.isNotEmpty()
 
-    println(" [Transaccion] Validando formulario...")
+    println(" [Transaccion] Validando formulario de GASTO...")
     println("   - amountValue: $amountValue")
     println("   - paymentMethod: $paymentMethod")
+    println("   - category: $category")
+    println("   - isValid: $isValid")
+
+    return isValid
+}
+
+//  Nueva función para validar el formulario de INGRESO (sin método de pago)
+private fun validateIncomeForm(
+    amount: String,
+    category: String
+): Boolean {
+    val amountValue = amount.toDoubleOrNull()
+    val isValid = amountValue != null && amountValue > 0 &&
+            category.isNotEmpty()
+
+    println(" [Transaccion] Validando formulario de INGRESO...")
+    println("   - amountValue: $amountValue")
     println("   - category: $category")
     println("   - isValid: $isValid")
 
